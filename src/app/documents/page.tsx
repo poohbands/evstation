@@ -538,6 +538,10 @@ export default function DocumentsPage() {
                                   <Copy className="mr-2 h-4 w-4 text-slate-500" />
                                   ทำสำเนา (คัดลอก)
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => router.push(`/envelope?docId=${doc.id}`)}>
+                                  <span className="mr-2 text-sm">✉️</span>
+                                  ใบปะหน้าซอง กฟภ.
+                                </DropdownMenuItem>
 
                                 {/* Convert to receipt: only for INV_ and PENDING */}
                                 {isInvoice && isPending && (

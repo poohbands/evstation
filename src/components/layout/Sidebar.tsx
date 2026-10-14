@@ -7,11 +7,18 @@ import {
   LayoutDashboard,
   FileText,
   FilePlus,
+  Mail,
+  FileCheck2,
+  CreditCard,
   Settings,
   X,
   Zap,
+  LogOut,
+  Shield,
+  User as UserIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/components/auth/AuthContext"
 
 interface SidebarProps {
   isOpen?: boolean
@@ -30,12 +37,27 @@ const navItems = [
     icon: FileText,
   },
   {
-    title: "สร้างเอกสารใหม่",
+    title: "สร้างเอกสาร (PEA VOLTA)",
     href: "/documents/new",
     icon: FilePlus,
   },
   {
-    title: "ตั้งค่าองค์กร",
+    title: "ใบปะหน้าซอง & Checklist",
+    href: "/envelope",
+    icon: Mail,
+  },
+  {
+    title: "หนังสือขอรับเงินโอน กฟภ.",
+    href: "/transfer-request",
+    icon: FileCheck2,
+  },
+  {
+    title: "บันทึกค่าบริการ PEA App",
+    href: "/monthly-fees",
+    icon: CreditCard,
+  },
+  {
+    title: "ตั้งค่าองค์กร & สิทธิ์ผู้ใช้",
     href: "/settings",
     icon: Settings,
   },
@@ -43,6 +65,7 @@ const navItems = [
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
 
   const isActive = (href: string) => {
     if (href === "/") {
@@ -81,7 +104,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             </div>
             <div>
               <div className="flex items-center gap-1 font-bold text-base text-white tracking-wide">
-                <span>⚡ EV Billing</span>
+                <span>⚡ PEA VOLTA</span>
               </div>
               <div className="text-[11px] text-slate-400 font-normal">
                 ระบบจัดการเอกสารการเงิน
@@ -116,7 +139,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   href={item.href}
                   onClick={onClose}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
                     active
                       ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
                       : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
@@ -124,7 +147,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 >
                   <Icon
                     className={cn(
-                      "h-5 w-5 shrink-0",
+                      "h-4 w-4 shrink-0",
                       active ? "text-white" : "text-slate-400"
                     )}
                   />
@@ -135,16 +158,45 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </nav>
         </div>
 
-        {/* Footer Info */}
-        <div className="border-t border-slate-800 p-4">
-          <div className="rounded-lg bg-slate-800/60 p-3 text-xs text-slate-400">
-            <div className="flex items-center gap-1.5 font-medium text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span>ระบบพร้อมใช้งาน</span>
+        {/* User Profile & Role Section */}
+        <div className="border-t border-slate-800 p-3 space-y-2">
+          {user ? (
+            <div className="rounded-lg bg-slate-800/80 p-2.5 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600/30 text-blue-300 ring-1 ring-blue-500/40">
+                  <UserIcon className="h-4 w-4" />
+                </div>
+                <div className="overflow-hidden">
+                  <div className="font-semibold text-white truncate">{user.username}</div>
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <Shield className="h-3 w-3 text-amber-400" />
+                    <span>{user.role}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                title="ออกจากระบบ"
+                className="p-1.5 rounded text-slate-400 hover:text-red-300 hover:bg-slate-700/60 transition"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
-            <div className="mt-1 text-[11px] text-slate-400">
-              EV Billing System v1.0
-            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-xs font-medium text-white hover:bg-blue-500"
+            >
+              <span>เข้าสู่ระบบ</span>
+            </Link>
+          )}
+
+          <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span>PEA VOLTA CONNEXT</span>
+            </span>
+            <span className="text-slate-400">v2.0</span>
           </div>
         </div>
       </aside>

@@ -540,3 +540,23 @@ export async function seedDatabase() {
 
   return resetMockData()
 }
+
+export async function createPairedDocuments(data: any) {
+  const { createMockPairedDocuments } = await import("@/lib/mock-store")
+  return createMockPairedDocuments(data)
+}
+
+export async function getMonthlyFeesList() {
+  const { getMockMonthlyFees } = await import("@/lib/mock-store")
+  return getMockMonthlyFees()
+}
+
+export async function createNewMonthlyFee(data: any) {
+  const { createMockMonthlyFee } = await import("@/lib/mock-store")
+  return createMockMonthlyFee(data)
+}
+
+export async function deleteMonthlyFeeById(id: string) {
+  const { deleteMockMonthlyFee } = await import("@/lib/mock-store")
+  return deleteMockMonthlyFee(id)
+}

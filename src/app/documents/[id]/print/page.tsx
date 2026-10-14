@@ -6,20 +6,18 @@ import { useParams, useRouter } from "next/navigation"
 import {
   Printer,
   ArrowLeft,
-  FileCheck,
-  Zap,
-  Building,
-  CheckCircle,
+  Mail,
+  FileCheck2,
   Loader2,
+  Copy,
+  Layers,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   formatCurrency,
   formatDate,
-  formatShortDate,
-  DOC_TYPE_LABELS,
-  PAYMENT_METHOD_LABELS,
-  THAI_MONTHS,
+  formatThaiDateDots,
+  PEA_HEADQUARTERS,
 } from "@/lib/utils"
 import { ThaiBahtText } from "@/lib/thai-baht-text"
 import type { DocumentWithItems, OrganizationSettingsData } from "@/types"
@@ -32,9 +30,7 @@ export default function DocumentPrintPage() {
   const [document, setDocument] = React.useState<DocumentWithItems | null>(null)
   const [settings, setSettings] = React.useState<OrganizationSettingsData | null>(null)
   const [loading, setLoading] = React.useState(true)
-
-  // Copy type: 'original' | 'copy' | 'both'
-  const [printCopyType, setPrintCopyType] = React.useState<"original" | "copy" | "both">("both")
+  const [printCopyType, setPrintCopyType] = React.useState<"original" | "copy" | "both">("original")
 
   React.useEffect(() => {
     async function fetchData() {
@@ -45,14 +41,8 @@ export default function DocumentPrintPage() {
           fetch(`/api/documents/${id}`),
           fetch(`/api/settings`),
         ])
-        if (docRes.ok) {
-          const docData = await docRes.json()
-          setDocument(docData)
-        }
-        if (setRes.ok) {
-          const setData = await setRes.json()
-          setSettings(setData)
-        }
+        if (docRes.ok) setDocument(await docRes.json())
+        if (setRes.ok) setSettings(await setRes.json())
       } catch (err) {
         console.error("Print page fetch error:", err)
       } finally {
@@ -62,16 +52,12 @@ export default function DocumentPrintPage() {
     fetchData()
   }, [id])
 
-  const handlePrint = () => {
-    window.print()
-  }
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100">
-        <div className="flex flex-col items-center gap-2">
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 font-prompt">
+        <div className="flex flex-col items-center gap-2 text-slate-500">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm text-slate-500 font-medium">กำลังจัดเตรียมเอกสารสำหรับพิมพ์...</p>
+          <span>กำลังเตรียมเอกสารสำหรับพิมพ์...</span>
         </div>
       </div>
     )
@@ -79,500 +65,430 @@ export default function DocumentPrintPage() {
 
   if (!document) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
-        <h2 className="text-lg font-bold text-slate-800">ไม่พบเอกสาร</h2>
-        <Button onClick={() => router.back()} className="mt-4">
-          ย้อนกลับ
-        </Button>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-4 font-prompt">
+        <div className="text-center space-y-3">
+          <h2 className="text-xl font-bold text-slate-800">ไม่พบเอกสาร</h2>
+          <Button onClick={() => router.push("/documents")}>กลับไปหน้ารายการ</Button>
+        </div>
       </div>
     )
   }
 
-  // Document Title by DocType
-  const getDocumentTitle = (type: string) => {
-    switch (type) {
-      case "INV_ELEC":
-        return "ใบแจ้งหนี้ / ใบเรียกเก็บเงินค่าส่วนต่างไฟฟ้า"
-      case "REC_ELEC":
-        return "ใบเสร็จรับเงินค่าส่วนต่างไฟฟ้า"
-      case "INV_RENT":
-        return "ใบแจ้งหนี้ / ใบเรียกเก็บเงินค่าเช่าพื้นที่"
-      case "REC_RENT":
-        return "ใบเสร็จรับเงินค่าเช่าพื้นที่"
-      default:
-        return DOC_TYPE_LABELS[type] || "เอกสารทางการเงิน"
-    }
-  }
+  const isInvoice = document.docType.startsWith("INV")
+  const isVat = document.isVatRegistered || (document.vatAmount && document.vatAmount > 0)
+  const branchText = document.branchNumber ? ` (สาขาที่ ${document.branchNumber})` : settings?.branchNumber ? ` (สาขาที่ ${settings.branchNumber})` : ""
 
-  const isInvoice = document.docType.startsWith("INV_")
-  const monthName =
-    document.billingMonth && document.billingMonth >= 1 && document.billingMonth <= 12
-      ? THAI_MONTHS[document.billingMonth - 1]
-      : ""
-  const yearThai = document.billingYear ? document.billingYear + 543 : ""
+  const issuerName = `${settings?.companyName || document.stationName}${isVat ? branchText : ""}`
 
-  // Render Single Sheet
-  const renderDocumentSheet = (copyLabel: "ต้นฉบับ (ORIGINAL)" | "สำเนา (COPY)", key: string) => {
-    const isOriginal = copyLabel.includes("ต้นฉบับ")
-    const totalItems = document.items?.length || 0
-    // Pad rows so table has a formal accounting height (minimum 5 rows)
-    const emptyRowsCount = Math.max(0, 5 - totalItems)
-
+  const renderSingleDoc = (copyBadgeText: string, isOriginal: boolean) => {
     return (
-      <div
-        key={key}
-        className="print-document bg-white text-slate-900 border border-slate-300 shadow-2xl mx-auto my-6 print:my-0 print:border-none print:shadow-none"
-      >
-        {/* Header: Issuer & Copy Badge */}
-        <div className="flex items-start justify-between border-b-2 border-slate-800 pb-3">
-          <div className="flex gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-xl print:border print:border-slate-800">
-              <Zap className="h-7 w-7 text-amber-300 fill-amber-300" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                {settings?.companyName || "บริษัท กรีนชาร์จ พร็อพเพอร์ตี้ จำกัด"}
-              </h2>
-              <p className="text-xs text-slate-600 max-w-lg mt-0.5 leading-snug">
-                {settings?.address || "88/8 หมู่ 5 ถนนพหลโยธิน ตำบลคลองหนึ่ง อำเภอคลองหลวง จังหวัดปทุมธานี 12120"}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-slate-600">
-                <span>เลขประจำตัวผู้เสียภาษี: {settings?.taxId || "0105564012345"}</span>
-                {settings?.phone && <span>โทร: {settings.phone}</span>}
-                {settings?.email && <span>อีเมล: {settings.email}</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Copy Badge */}
-          <div className="text-right">
-            <div
-              className={`inline-block rounded px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
-                isOriginal
-                  ? "bg-slate-900 text-white print:bg-slate-900 print:text-white"
-                  : "border-2 border-slate-700 text-slate-800 bg-slate-50"
-              }`}
-            >
-              {copyLabel}
-            </div>
-          </div>
+      <div className="print-document bg-white text-black p-8 md:p-12 my-6 mx-auto shadow-xl border border-slate-300 print:shadow-none print:border-none print:m-0 print:p-0">
+        {/* Top Original/Copy Badge */}
+        <div className="flex justify-end mb-2">
+          <span className="border border-black px-3 py-0.5 text-xs font-bold tracking-wider uppercase">
+            {copyBadgeText}
+          </span>
         </div>
 
-        {/* Document Title Banner */}
-        <div className="my-3 text-center border-b border-slate-200 pb-2">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            {getDocumentTitle(document.docType)}
-          </h1>
-          <div className="mt-1 flex justify-center gap-6 text-xs text-slate-700">
-            <div>
-              <span className="font-semibold">เลขที่:</span>{" "}
-              <span className="font-bold text-sm text-blue-900">{document.docNumber}</span>
-            </div>
-            <div>
-              <span className="font-semibold">วันที่:</span> {formatDate(document.issueDate)}
-            </div>
-            {isInvoice && document.dueDate && (
-              <div className="text-red-700 font-semibold">
-                <span>ครบกำหนดชำระ:</span> {formatDate(document.dueDate)}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Customer & Station Info Box */}
-        <div className="mb-3 rounded border border-slate-300 p-2.5 text-xs">
-          <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-8">
-              <div className="flex">
-                <span className="w-24 font-semibold text-slate-700 shrink-0">ลูกค้า:</span>
-                <span className="font-bold text-slate-900">{document.customerName || "-"}</span>
-              </div>
-              <div className="flex mt-1">
-                <span className="w-24 font-semibold text-slate-700 shrink-0">ที่อยู่:</span>
-                <span className="text-slate-800">{document.customerAddress || "-"}</span>
-              </div>
-              <div className="flex mt-1">
-                <span className="w-24 font-semibold text-slate-700 shrink-0">เลขประจำตัวผู้เสียภาษี:</span>
-                <span className="text-slate-800">
-                  {document.customerTaxId || "-"} &nbsp;&nbsp;
-                  <span className="font-semibold">สาขา:</span> {document.customerBranch || "สำนักงานใหญ่"}
-                </span>
-              </div>
+        {isInvoice ? (
+          /* ========================================================= */
+          /* TEMPLATE 1: PEA VOLTA INVOICE (ใบแจ้งหนี้)                 */
+          /* ========================================================= */
+          <div className="space-y-6">
+            {/* Top Left: Issuer Details */}
+            <div className="text-sm leading-relaxed">
+              <div className="font-bold text-base">{issuerName}</div>
+              <div>ที่อยู่ {settings?.address || "88/8 หมู่ 5 ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120"}</div>
+              <div>โทรศัพท์ {settings?.phone || "02-123-4567"}</div>
+              <div>เลขประจำตัวผู้เสียภาษี {settings?.taxId || "0105564012345"}</div>
             </div>
 
-            <div className="col-span-4 border-l border-slate-200 pl-3">
-              <div className="flex">
-                <span className="w-20 font-semibold text-slate-700 shrink-0">สถานี:</span>
-                <span className="font-medium text-slate-900 truncate">
-                  {document.stationName || "-"}
-                </span>
-              </div>
-              <div className="flex mt-1">
-                <span className="w-20 font-semibold text-slate-700 shrink-0">เลขที่สัญญา:</span>
-                <span className="text-slate-800">{document.contractRef || "-"}</span>
-              </div>
-              <div className="flex mt-1">
-                <span className="w-20 font-semibold text-slate-700 shrink-0">ประจำเดือน:</span>
-                <span className="font-bold text-slate-900">
-                  {monthName} {yearThai}
-                </span>
-              </div>
-              {document.refInvoice && (
-                <div className="flex mt-1 text-slate-600">
-                  <span className="w-20 font-semibold shrink-0">อ้างอิงใบแจ้งหนี้:</span>
-                  <span>{document.refInvoice.docNumber}</span>
+            {/* Center Title */}
+            <div className="text-center py-2">
+              <h1 className="text-2xl font-bold tracking-wide">ใบแจ้งหนี้</h1>
+            </div>
+
+            {/* Customer & Document Info Header */}
+            <div className="grid grid-cols-12 gap-4 border-t border-b border-black py-3 text-sm">
+              <div className="col-span-8 space-y-1">
+                <div>
+                  <span className="font-bold">ลูกค้า </span>
+                  <span>{document.customerName || PEA_HEADQUARTERS.name}</span>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
+                <div>
+                  <span className="font-bold">ที่อยู่ </span>
+                  <span>{document.customerAddress || PEA_HEADQUARTERS.address}</span>
+                </div>
+                <div>
+                  <span className="font-bold">เลขประจำตัวผู้เสียภาษี </span>
+                  <span className="font-mono">{document.customerTaxId || PEA_HEADQUARTERS.taxId}</span>
+                </div>
+              </div>
 
-        {/* Line Items Table */}
-        <div className="mb-3 overflow-hidden rounded border border-slate-400">
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-slate-400 bg-slate-100 font-bold text-slate-800 text-center">
-                <th className="border-r border-slate-300 py-2 px-2 w-10">ลำดับ</th>
-                <th className="border-r border-slate-300 py-2 px-3 text-left">รายการ</th>
-                {document.docType.includes("ELEC") && (
-                  <>
-                    <th className="border-r border-slate-300 py-2 px-2 w-20 text-right">
-                      มิเตอร์ก่อน
-                    </th>
-                    <th className="border-r border-slate-300 py-2 px-2 w-20 text-right">
-                      มิเตอร์หลัง
-                    </th>
-                  </>
-                )}
-                <th className="border-r border-slate-300 py-2 px-2 w-16 text-right">จำนวน</th>
-                <th className="border-r border-slate-300 py-2 px-2 w-14 text-center">หน่วย</th>
-                <th className="border-r border-slate-300 py-2 px-2 w-24 text-right">ราคา/หน่วย</th>
-                <th className="py-2 px-3 w-28 text-right">จำนวนเงิน (บาท)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {document.items?.map((item) => (
-                <tr key={item.id || item.itemOrder} className="border-b border-slate-200">
-                  <td className="border-r border-slate-300 py-1.5 px-2 text-center text-slate-600">
-                    {item.itemOrder}
-                  </td>
-                  <td className="border-r border-slate-300 py-1.5 px-3 font-medium text-slate-900">
-                    {item.description}
-                  </td>
-                  {document.docType.includes("ELEC") && (
-                    <>
-                      <td className="border-r border-slate-300 py-1.5 px-2 text-right text-slate-700">
-                        {item.meterPrevious != null ? formatCurrency(item.meterPrevious) : "-"}
-                      </td>
-                      <td className="border-r border-slate-300 py-1.5 px-2 text-right text-slate-700">
-                        {item.meterCurrent != null ? formatCurrency(item.meterCurrent) : "-"}
-                      </td>
-                    </>
-                  )}
-                  <td className="border-r border-slate-300 py-1.5 px-2 text-right font-medium text-slate-900">
-                    {item.quantity.toLocaleString("th-TH")}
-                  </td>
-                  <td className="border-r border-slate-300 py-1.5 px-2 text-center text-slate-600">
-                    {item.unitName || "-"}
-                  </td>
-                  <td className="border-r border-slate-300 py-1.5 px-2 text-right text-slate-800">
-                    {formatCurrency(item.unitPrice)}
-                  </td>
-                  <td className="py-1.5 px-3 text-right font-bold text-slate-900">
-                    {formatCurrency(item.amount)}
-                  </td>
+              <div className="col-span-4 text-right space-y-1">
+                <div>
+                  <span className="font-bold">วันที่ </span>
+                  <span>{formatThaiDateDots(document.issueDate)}</span>
+                </div>
+                <div>
+                  <span className="font-bold">เลขที่ : </span>
+                  <span className="font-mono font-bold">{document.docNumber}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Table Columns: ลำดับ | รายการ | จำนวนหน่วย (Unit) | จำนวนเงิน (Bath) */}
+            <table className="w-full text-sm border-collapse border border-black">
+              <thead>
+                <tr className="border-b border-black bg-slate-50 print:bg-transparent text-center font-bold">
+                  <th className="border-r border-black py-2.5 px-2 w-14">ลำดับ</th>
+                  <th className="border-r border-black py-2.5 px-3 text-left">รายการ</th>
+                  <th className="border-r border-black py-2.5 px-2 w-28 text-center leading-tight">
+                    จำนวนหน่วย<br /><span className="text-xs font-normal">(Unit)</span>
+                  </th>
+                  <th className="py-2.5 px-3 w-36 text-right leading-tight">
+                    จำนวนเงิน<br /><span className="text-xs font-normal">(Bath)</span>
+                  </th>
                 </tr>
-              ))}
-
-              {/* Pad empty rows for standard A4 accounting look */}
-              {Array.from({ length: emptyRowsCount }).map((_, i) => (
-                <tr key={`empty-${i}`} className="border-b border-slate-100 h-6">
-                  <td className="border-r border-slate-300">&nbsp;</td>
-                  <td className="border-r border-slate-300">&nbsp;</td>
-                  {document.docType.includes("ELEC") && (
-                    <>
-                      <td className="border-r border-slate-300">&nbsp;</td>
-                      <td className="border-r border-slate-300">&nbsp;</td>
-                    </>
-                  )}
-                  <td className="border-r border-slate-300">&nbsp;</td>
-                  <td className="border-r border-slate-300">&nbsp;</td>
-                  <td className="border-r border-slate-300">&nbsp;</td>
-                  <td>&nbsp;</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Calculations Section */}
-        <div className="mb-3 grid grid-cols-12 gap-3 text-xs">
-          {/* Left: Thai Baht Text Box & Notes */}
-          <div className="col-span-7 flex flex-col justify-between space-y-2">
-            <div className="rounded border border-slate-400 p-2.5 bg-slate-50/50">
-              <span className="font-semibold text-slate-700">จำนวนเงินตัวอักษร:</span>
-              <div className="mt-1 font-bold text-slate-900 text-sm">
-                {document.thaiBahtText || ThaiBahtText(document.netPayable)}
-              </div>
-            </div>
-
-            {/* Payment instructions or Notes */}
-            {isInvoice ? (
-              <div className="rounded border border-slate-300 p-2 text-[11px] bg-slate-50">
-                <span className="font-bold text-slate-800">ข้อมูลการโอนชำระเงิน:</span>
-                <div className="mt-0.5 text-slate-700">
-                  ธนาคาร: <span className="font-semibold">{settings?.bankName || "ธนาคารกสิกรไทย"}</span> |
-                  เลขที่บัญชี: <span className="font-bold">{settings?.bankAccountNo || "123-4-56789-0"}</span>
-                </div>
-                <div className="text-slate-700">
-                  ชื่อบัญชี: {settings?.bankAccountName || settings?.companyName}
-                </div>
-                {document.notes && (
-                  <div className="mt-1 text-slate-600 border-t pt-1">
-                    หมายเหตุ: {document.notes}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="rounded border border-slate-300 p-2 text-[11px] bg-slate-50">
-                <span className="font-bold text-slate-800">ข้อมูลการรับเงิน:</span>
-                <div className="mt-0.5 text-slate-700">
-                  วิธีการชำระ:{" "}
-                  <span className="font-semibold">
-                    {document.paymentMethod
-                      ? PAYMENT_METHOD_LABELS[document.paymentMethod] || document.paymentMethod
-                      : "โอนเงิน"}
-                  </span>
-                  {document.paymentDate && (
-                    <span> | วันที่: {formatDate(document.paymentDate)}</span>
-                  )}
-                  {document.paymentRef && (
-                    <span> | เลขที่อ้างอิง: {document.paymentRef}</span>
-                  )}
-                </div>
-                {document.notes && (
-                  <div className="mt-1 text-slate-600 border-t pt-1">
-                    หมายเหตุ: {document.notes}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Calculations Totals Box */}
-          <div className="col-span-5 rounded border border-slate-400 bg-white">
-            <table className="w-full text-xs">
+              </thead>
               <tbody>
-                <tr className="border-b border-slate-200">
-                  <td className="py-1 px-3 text-slate-600 font-medium">รวมเป็นเงิน</td>
-                  <td className="py-1 px-3 text-right font-semibold text-slate-900">
-                    {formatCurrency(document.subtotal)}
-                  </td>
-                </tr>
-                {document.enableVat && (
-                  <tr className="border-b border-slate-200">
-                    <td className="py-1 px-3 text-slate-600">ภาษีมูลค่าเพิ่ม {document.vatRate}%</td>
-                    <td className="py-1 px-3 text-right font-semibold text-slate-900">
-                      {formatCurrency(document.vatAmount)}
+                {document.items.map((it, idx) => (
+                  <tr key={it.id || idx} className="border-b border-black">
+                    <td className="border-r border-black py-3 px-2 text-center align-top font-medium">
+                      {idx + 1}
+                    </td>
+                    <td className="border-r border-black py-3 px-3 align-top leading-relaxed">
+                      {it.description}
+                    </td>
+                    <td className="border-r border-black py-3 px-2 text-center align-top font-mono">
+                      {it.quantity}
+                    </td>
+                    <td className="py-3 px-3 text-right align-top font-mono font-medium">
+                      {formatCurrency(it.amount)}
                     </td>
                   </tr>
-                )}
-                <tr className="border-b border-slate-200 bg-slate-50/50">
-                  <td className="py-1 px-3 text-slate-800 font-semibold">จำนวนเงินรวมทั้งสิ้น</td>
-                  <td className="py-1 px-3 text-right font-bold text-slate-900">
-                    {formatCurrency(document.grandTotal)}
-                  </td>
-                </tr>
-                {document.enableWht && (
-                  <tr className="border-b border-slate-200 text-amber-800">
-                    <td className="py-1 px-3">หักภาษี ณ ที่จ่าย {document.whtRate}%</td>
-                    <td className="py-1 px-3 text-right font-semibold">
-                      -{formatCurrency(document.whtAmount)}
-                    </td>
+                ))}
+                {/* Empty rows to maintain formal document height */}
+                {document.items.length < 3 && (
+                  <tr className="border-b border-black h-16">
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td></td>
                   </tr>
                 )}
-                <tr className="bg-slate-100 font-bold border-t-2 border-slate-800">
-                  <td className="py-2 px-3 text-slate-900 text-sm">ยอดชำระสุทธิ</td>
-                  <td className="py-2 px-3 text-right text-base text-blue-900 font-extrabold">
-                    {formatCurrency(document.netPayable)}
-                  </td>
-                </tr>
               </tbody>
+              <tfoot>
+                {/* Table Footer with Thai Baht Text on Left, Calculations on Right */}
+                <tr className="border-t border-black">
+                  <td colSpan={2} className="border-r border-black p-3 align-top">
+                    <div className="font-bold mb-1">จำนวนเงิน (ตัวอักษร)</div>
+                    <div className="font-semibold text-slate-800">
+                      {document.thaiBahtText || ThaiBahtText(document.grandTotal)}
+                    </div>
+                  </td>
+                  <td colSpan={2} className="p-0 align-top">
+                    <div className="text-sm">
+                      {isVat ? (
+                        <>
+                          <div className="flex justify-between border-b border-black px-3 py-1.5 font-medium">
+                            <span>รวมเป็นเงิน</span>
+                            <span className="font-mono">{formatCurrency(document.subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-black px-3 py-1.5 font-medium">
+                            <span>จำนวนภาษีมูลค่าเพิ่ม 7%</span>
+                            <span className="font-mono">{formatCurrency(document.vatAmount)}</span>
+                          </div>
+                        </>
+                      ) : null}
+
+                      {document.whtAmount && document.whtAmount > 0 ? (
+                        <div className="flex justify-between border-b border-black px-3 py-1.5 font-medium text-slate-700">
+                          <span>หักภาษี ณ ที่จ่าย {document.whtRate}%</span>
+                          <span className="font-mono">- {formatCurrency(document.whtAmount)}</span>
+                        </div>
+                      ) : null}
+
+                      <div className="flex justify-between px-3 py-2 font-bold text-base bg-slate-50 print:bg-transparent">
+                        <span>จำนวนเงินรวมทั้งสิ้น</span>
+                        <span className="font-mono">{formatCurrency(document.netPayable || document.grandTotal)}</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
-          </div>
-        </div>
 
-        {/* Signature Blocks */}
-        <div className="mt-8 pt-4 border-t border-slate-300">
-          <div className="grid grid-cols-2 gap-8 text-center text-xs">
-            {/* Left Signer */}
-            <div>
-              <p className="font-semibold text-slate-800">
-                {isInvoice ? "ผู้วางบิล / ผู้มีอำนาจลงนาม" : "ผู้รับเงิน / ผู้มีอำนาจลงนาม"}
-              </p>
-              <div className="h-16 flex items-end justify-center">
-                <span className="w-48 border-b border-dotted border-slate-600 block" />
+            {/* Signature Section: ผู้วางบิล & ผู้รับวางบิล */}
+            <div className="grid grid-cols-2 gap-8 pt-6 text-sm">
+              <div className="text-center space-y-2">
+                <div className="font-bold">ผู้วางบิล</div>
+                <div className="pt-8">......................................................</div>
+                <div>({settings?.signerName || "นายสมชาย รักษ์พลังงาน"})</div>
+                <div>วันที่ ...../...../.....</div>
               </div>
-              <p className="mt-2 font-medium text-slate-800">
-                ({settings?.signerName || "นายสมชาย รักษ์พลังงาน"})
-              </p>
-              <p className="text-slate-500 text-[11px]">
-                {settings?.signerTitle || "กรรมการผู้จัดการ"}
-              </p>
-              <p className="mt-1 text-slate-400 text-[11px]">วันที่ _____/_____/_________</p>
-              <p className="mt-2 text-[10px] text-slate-400">(ประทับตราบริษัท)</p>
+
+              <div className="text-center space-y-2">
+                <div className="font-bold">ผู้รับวางบิล</div>
+                <div className="pt-8">......................................................</div>
+                <div>(การไฟฟ้าส่วนภูมิภาค)</div>
+                <div>วันที่ ...../...../.....</div>
+              </div>
             </div>
 
-            {/* Right Signer */}
-            <div>
-              <p className="font-semibold text-slate-800">
-                {isInvoice ? "ผู้รับวางบิล" : "ผู้จ่ายเงิน"}
-              </p>
-              <div className="h-16 flex items-end justify-center">
-                <span className="w-48 border-b border-dotted border-slate-600 block" />
+            {/* Payment Instruction Footer (Official PEA Requirements) */}
+            <div className="border border-black p-3.5 text-xs space-y-1.5 mt-6 bg-slate-50/40 print:bg-transparent">
+              <div className="font-bold">
+                กรุณาโอนเข้าบัญชี  {settings?.bankAccountName || settings?.companyName || "บริษัท กรีนชาร์จ พร็อพเพอร์ตี้ จำกัด"}  ชื่อธนาคาร {settings?.bankName || "ธนาคารกสิกรไทย"} สาขา {settings?.bankBranch || "สาขาคลองหลวง"}
               </div>
-              <p className="mt-2 font-medium text-slate-800">
-                (_________________________________)
-              </p>
-              <p className="text-slate-500 text-[11px]">
-                {document.customerName || "การไฟฟ้าส่วนภูมิภาค"}
-              </p>
-              <p className="mt-1 text-slate-400 text-[11px]">วันที่ _____/_____/_________</p>
-              <p className="mt-2 text-[10px] text-slate-400">(ประทับตราหน่วยงาน)</p>
+              <div>
+                บัญชี{settings?.bankAccountType === "CURRENT" ? "กระแสรายวัน" : "ออมทรัพย์"} เลขที่ {settings?.bankAccountNo || "123-4-56789-0"}
+              </div>
+              <div>
+                โทร. คุณ {settings?.contactPerson || "สมชาย"} เบอร์ {settings?.contactPhone || "081-234-5678"} (ฝ่ายบัญชี) Email : {settings?.email || "billing@company.co.th"}
+              </div>
+              <div className="text-[11px] text-slate-600 print:text-black italic pt-0.5">
+                * หมายเหตุ: ธนาคารกรุงไทย (Direct Credit) ยกเว้นค่าธรรมเนียม / ต่างธนาคารไม่เกิน 2 ล้านบาท (Smart Credit) ยกเว้นค่าธรรมเนียมการโอน
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* ========================================================= */
+          /* TEMPLATE 2: PEA VOLTA RECEIPT / TAX INVOICE               */
+          /* ========================================================= */
+          <div className="space-y-6">
+            {/* Center Title */}
+            <div className="text-center py-1">
+              <h1 className="text-2xl font-bold tracking-wide">
+                {isVat ? "ใบเสร็จรับเงิน / ใบกำกับภาษี" : "ใบเสร็จรับเงิน"}
+              </h1>
+            </div>
+
+            {/* Top Section: Issuer Info per PEA template */}
+            <div className="text-sm space-y-1 leading-relaxed border-b border-black pb-3">
+              <div>
+                <span className="font-bold">ชื่อผู้ประกอบการ : </span>
+                <span>{issuerName}</span>
+              </div>
+              <div>
+                <span className="font-bold">เลขประจำตัวผู้เสียภาษีอากร : </span>
+                <span className="font-mono">{settings?.taxId || document.customerTaxId}</span>
+              </div>
+              <div>
+                <span className="font-bold">ชื่อสถานีบริการ : </span>
+                <span>{document.stationName || settings?.companyName}</span>
+              </div>
+              <div>
+                <span className="font-bold">ที่อยู่ : </span>
+                <span>{settings?.address || document.customerAddress}</span>
+              </div>
+            </div>
+
+            {/* Customer & Document Info Header */}
+            <div className="grid grid-cols-12 gap-4 border-b border-black pb-3 text-sm">
+              <div className="col-span-8 space-y-1">
+                <div>
+                  <span className="font-bold">เลขที่บัญชีลูกค้า : </span>
+                  <span className="font-mono">{document.contractRef || "-"}</span>
+                </div>
+                <div>
+                  <span className="font-bold">ชื่อลูกค้า : </span>
+                  <span>{document.customerName || PEA_HEADQUARTERS.name}</span>
+                </div>
+                <div>
+                  <span className="font-bold">ที่อยู่ลูกค้า : </span>
+                  <span>{document.customerAddress || PEA_HEADQUARTERS.address}</span>
+                </div>
+                <div>
+                  <span className="font-bold">เลขประจำตัวผู้เสียภาษี : </span>
+                  <span className="font-mono">{document.customerTaxId || PEA_HEADQUARTERS.taxId}</span>
+                </div>
+              </div>
+
+              <div className="col-span-4 text-right space-y-1">
+                <div>
+                  <span className="font-bold">เลขที่เอกสาร : </span>
+                  <span className="font-mono font-bold">{document.docNumber}</span>
+                </div>
+                <div>
+                  <span className="font-bold">วันที่ </span>
+                  <span>{formatThaiDateDots(document.issueDate)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Table Columns: ลำดับ | รายการ | มูลค่า (บาท) - strictly NO unit column */}
+            <table className="w-full text-sm border-collapse border border-black">
+              <thead>
+                <tr className="border-b border-black bg-slate-50 print:bg-transparent text-center font-bold">
+                  <th className="border-r border-black py-2.5 px-2 w-14">ลำดับ</th>
+                  <th className="border-r border-black py-2.5 px-3 text-left">รายการ</th>
+                  <th className="py-2.5 px-3 w-40 text-right leading-tight">
+                    มูลค่า<br /><span className="text-xs font-normal">(บาท)</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {document.items.map((it, idx) => (
+                  <tr key={it.id || idx} className="border-b border-black">
+                    <td className="border-r border-black py-3 px-2 text-center align-top font-medium">
+                      {idx + 1}
+                    </td>
+                    <td className="border-r border-black py-3 px-3 align-top leading-relaxed">
+                      {it.description}
+                    </td>
+                    <td className="py-3 px-3 text-right align-top font-mono font-medium">
+                      {formatCurrency(it.amount)}
+                    </td>
+                  </tr>
+                ))}
+                {document.items.length < 3 && (
+                  <tr className="border-b border-black h-20">
+                    <td className="border-r border-black"></td>
+                    <td className="border-r border-black"></td>
+                    <td></td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                {/* Table Footer with Thai Baht Text & VAT Breakdown */}
+                <tr className="border-t border-black">
+                  <td colSpan={2} className="border-r border-black p-3 align-top">
+                    <div className="font-bold mb-1">จำนวนเงิน (ตัวอักษร)</div>
+                    <div className="font-semibold text-slate-800">
+                      ({document.thaiBahtText ? document.thaiBahtText.replace(/[()]/g, "") : ThaiBahtText(document.grandTotal).replace(/[()]/g, "")})
+                    </div>
+                  </td>
+                  <td className="p-0 align-top">
+                    <div className="text-sm">
+                      {isVat ? (
+                        <>
+                          <div className="flex justify-between border-b border-black px-3 py-1.5 font-medium">
+                            <span>รวมเป็นเงิน</span>
+                            <span className="font-mono">{formatCurrency(document.subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-black px-3 py-1.5 font-medium">
+                            <span>จำนวนภาษีมูลค่าเพิ่ม 7 %</span>
+                            <span className="font-mono">{formatCurrency(document.vatAmount)}</span>
+                          </div>
+                        </>
+                      ) : null}
+
+                      <div className="flex justify-between px-3 py-2 font-bold text-base bg-slate-50 print:bg-transparent">
+                        <span>จำนวนเงินรวมทั้งสิ้น</span>
+                        <span className="font-mono">{formatCurrency(document.grandTotal)}</span>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Bottom Right Signature: ผู้รับเงิน */}
+            <div className="flex justify-end pt-12 pr-4 text-sm">
+              <div className="text-center space-y-3">
+                <div>ผู้รับเงิน  ________________________________________</div>
+                <div className="text-xs text-slate-600 print:text-black">
+                  ({settings?.signerName || "นายสมชาย รักษ์พลังงาน"})
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-200/70 py-6 print:bg-white print:py-0">
-      {/* Control Bar - Hidden during print */}
-      <div className="container mx-auto mb-6 max-w-4xl rounded-xl bg-white p-4 shadow-md print:hidden">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.back()}
-              className="gap-1.5"
+    <div className="min-h-screen bg-slate-100 font-sarabun text-slate-900 pb-16">
+      {/* Print Controls Header (Hidden in Print) */}
+      <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b bg-white px-6 py-3 shadow-md print:hidden font-prompt">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/documents/${id}`)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            กลับไปหน้ารายละเอียด
+          </Button>
+
+          <div className="hidden sm:block text-sm">
+            <span className="font-semibold text-slate-900">{document.docNumber}</span>
+            <span className="text-slate-400 mx-2">&bull;</span>
+            <span className="text-slate-600">
+              {isInvoice ? "ใบแจ้งหนี้ กฟภ." : isVat ? "ใบเสร็จ/ใบกำกับภาษี กฟภ." : "ใบเสร็จรับเงิน กฟภ."}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Copy Selector */}
+          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs">
+            <button
+              onClick={() => setPrintCopyType("original")}
+              className={`px-2.5 py-1 rounded font-medium transition ${
+                printCopyType === "original"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <ArrowLeft className="h-4 w-4" />
-              กลับ
-            </Button>
-            <div>
-              <h2 className="font-bold text-slate-900 text-sm">
-                พิมพ์เอกสาร: {document.docNumber}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {DOC_TYPE_LABELS[document.docType]}
-              </p>
-            </div>
+              ต้นฉบับ
+            </button>
+            <button
+              onClick={() => setPrintCopyType("copy")}
+              className={`px-2.5 py-1 rounded font-medium transition ${
+                printCopyType === "copy"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              สำเนา
+            </button>
+            <button
+              onClick={() => setPrintCopyType("both")}
+              className={`px-2.5 py-1 rounded font-medium transition ${
+                printCopyType === "both"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              ทั้งสองแบบ
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Sheet Copy Options */}
-            <div className="flex items-center rounded-lg border bg-slate-50 p-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setPrintCopyType("original")}
-                className={`rounded px-2.5 py-1 font-medium transition ${
-                  printCopyType === "original"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                ต้นฉบับ
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintCopyType("copy")}
-                className={`rounded px-2.5 py-1 font-medium transition ${
-                  printCopyType === "copy"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                สำเนา
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintCopyType("both")}
-                className={`rounded px-2.5 py-1 font-medium transition ${
-                  printCopyType === "both"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                ทั้งสองแบบ (ต้นฉบับ + สำเนา)
-              </button>
-            </div>
-
-            {/* Print Button */}
-            <Button
-              onClick={handlePrint}
-              className="gap-2 bg-blue-600 px-5 hover:bg-blue-700"
-            >
-              <Printer className="h-4 w-4" />
-              พิมพ์เอกสาร / บันทึก PDF
+          {/* Envelope Cover Sheet Shortcut */}
+          <Link href={`/envelope?docId=${document.id}`}>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              <Mail className="h-4 w-4 text-purple-600" />
+              ใบปะหน้าซอง กฟภ.
             </Button>
-          </div>
+          </Link>
+
+          {/* Print Button */}
+          <Button
+            onClick={() => window.print()}
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm font-semibold text-sm"
+          >
+            <Printer className="h-4 w-4" />
+            พิมพ์เอกสาร / บันทึก PDF (A4)
+          </Button>
         </div>
       </div>
 
-      {/* Printable Documents Container */}
-      <div className="print-area">
-        {(printCopyType === "original" || printCopyType === "both") &&
-          renderDocumentSheet("ต้นฉบับ (ORIGINAL)", "sheet-original")}
-
-        {printCopyType === "both" && <div className="page-break" />}
-
-        {(printCopyType === "copy" || printCopyType === "both") &&
-          renderDocumentSheet("สำเนา (COPY)", "sheet-copy")}
+      {/* Render Document(s) for Screen and Print */}
+      <div className="max-w-[210mm] mx-auto print:max-w-none">
+        {printCopyType === "original" && renderSingleDoc("ต้นฉบับ (ORIGINAL)", true)}
+        {printCopyType === "copy" && renderSingleDoc("สำเนา (COPY)", false)}
+        {printCopyType === "both" && (
+          <>
+            {renderSingleDoc("ต้นฉบับ (ORIGINAL)", true)}
+            <div className="page-break" style={{ pageBreakBefore: "always" }} />
+            {renderSingleDoc("สำเนา (COPY)", false)}
+          </>
+        )}
       </div>
-
-      {/* Print CSS Rules */}
-      <style jsx global>{`
-        @page {
-          size: A4 portrait;
-          margin: 6mm;
-        }
-
-        @media print {
-          html,
-          body {
-            background-color: #ffffff !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          .print-document {
-            width: 100% !important;
-            min-height: auto !important;
-            margin: 0 !important;
-            padding: 6mm !important;
-            box-shadow: none !important;
-            border: none !important;
-            page-break-inside: avoid;
-          }
-
-          .page-break {
-            page-break-after: always;
-            break-after: page;
-          }
-        }
-
-        .print-document {
-          width: 210mm;
-          min-height: 287mm;
-          padding: 10mm;
-          font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 13px;
-          line-height: 1.4;
-          box-sizing: border-box;
-        }
-      `}</style>
     </div>
   )
 }

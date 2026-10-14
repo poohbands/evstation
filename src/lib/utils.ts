@@ -30,6 +30,14 @@ export function formatShortDate(date: string | Date): string {
   })
 }
 
+export function formatThaiDateDots(date: string | Date): string {
+  const d = new Date(date)
+  const day = d.getDate().toString().padStart(2, "0")
+  const month = (d.getMonth() + 1).toString().padStart(2, "0")
+  const year = d.getFullYear() + 543
+  return `${day} / ${month} / ${year}`
+}
+
 export const DOC_TYPE_LABELS: Record<string, string> = {
   INV_ELEC: "ใบแจ้งหนี้ค่าส่วนต่างไฟฟ้า",
   REC_ELEC: "ใบเสร็จรับเงินค่าส่วนต่างไฟฟ้า",
@@ -56,6 +64,13 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "เงินสด",
 }
 
+export const PAYOUT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  WAITING_SEND: { label: "1. รอส่งเอกสาร", color: "bg-amber-100 text-amber-800 border-amber-200" },
+  SENT: { label: "2. ส่งเอกสารแล้ว", color: "bg-blue-100 text-blue-800 border-blue-200" },
+  PEA_RECEIVED: { label: "3. กฟภ. ได้รับแล้ว", color: "bg-purple-100 text-purple-800 border-purple-200" },
+  PAID: { label: "4. ได้รับเงินแล้ว", color: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+}
+
 export const THAI_MONTHS = [
   "มกราคม",
   "กุมภาพันธ์",
@@ -70,3 +85,50 @@ export const THAI_MONTHS = [
   "พฤศจิกายน",
   "ธันวาคม",
 ]
+
+/**
+ * Official PEA Headquarters Billing Details
+ */
+export const PEA_HEADQUARTERS = {
+  name: "การไฟฟ้าส่วนภูมิภาค (สำนักงานใหญ่)",
+  address: "เลขที่ 200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900",
+  taxId: "0994000165501",
+  branch: "สำนักงานใหญ่",
+}
+
+/**
+ * Official Mailing Address for PEA VOLTA Billing Documents
+ */
+export const PEA_ENVELOPE_RECIPIENT = {
+  contactName: "นางสาวระวีพร บุญพิทักษ์ (ปลื้ม)",
+  department: "กองธุรกิจบริหารสินทรัพย์ ฝ่ายพัฒนาธุรกิจ ชั้น 5 อาคาร LED",
+  organization: "การไฟฟ้าส่วนภูมิภาค (สำนักงานใหญ่)",
+  address: "เลขที่ 200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ",
+  postalCode: "10900",
+  phone: "065-9546885",
+}
+
+/**
+ * Generate LINE notification message to send to PEA Officer with tracking number
+ */
+export function generatePeaLineMessage(params: {
+  stationName: string
+  billingMonthYear: string
+  invNumber: string
+  recNumber?: string
+  amount: number
+  trackingNumber: string
+  carrier?: string
+}): string {
+  const carrier = params.carrier || "ไปรษณีย์ไทย EMS"
+  return `เรียน คุณระวีพร (การไฟฟ้าส่วนภูมิภาค / PEA VOLTA)
+
+ขอแจ้งจัดส่งเอกสารตัวจริงเพื่อเบิกจ่ายค่าบริการอัดประจุไฟฟ้า ประจำงวด ${params.billingMonthYear}
+- สถานีบริการ: ${params.stationName}
+- เลขที่ใบแจ้งหนี้: ${params.invNumber}${params.recNumber ? `\n- เลขที่ใบเสร็จรับเงิน/ใบกำกับภาษี: ${params.recNumber}` : ""}
+- ยอดเงินขอเบิก: ${formatCurrency(params.amount)} บาท
+- ขนส่ง: ${carrier}
+- เลขพัสดุ (Tracking No.): ${params.trackingNumber}
+
+รบกวนตรวจสอบและดำเนินการตามขั้นตอนให้ด้วยนะคะ/ครับ ขอบพระคุณมากค่ะ/ครับ`.trim()
+}

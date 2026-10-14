@@ -24,6 +24,13 @@ import {
   Loader2,
   Zap,
   Home,
+  Truck,
+  Send,
+  Mail,
+  MessageSquare,
+  ExternalLink,
+  Sparkles,
+  Check,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -70,6 +77,9 @@ import {
   DOC_TYPE_LABELS,
   STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
+  PAYOUT_STATUS_LABELS,
+  formatThaiDateDots,
+  generatePeaLineMessage,
   THAI_MONTHS,
 } from "@/lib/utils"
 import {
@@ -79,8 +89,10 @@ import {
   calculateGrandTotal,
   calculateNetPayable,
   getDefaultWhtRate,
+  getRemainingBusinessDays,
+  addBusinessDays,
 } from "@/lib/calculations"
-import type { DocType, DocumentItemInput, DocumentWithItems, PaymentMethod } from "@/types"
+import type { DocType, DocumentItemInput, DocumentWithItems, PaymentMethod, PayoutStatus, PayoutType } from "@/types"
 
 function DocumentDetailContent() {
   const params = useParams()
@@ -97,6 +109,16 @@ function DocumentDetailContent() {
   const [saving, setSaving] = React.useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false)
   const [converting, setConverting] = React.useState(false)
+
+  // PEA Payout & Tracking states
+  const [trackingModalOpen, setTrackingModalOpen] = React.useState(false)
+  const [payoutStatus, setPayoutStatus] = React.useState<PayoutStatus>("WAITING_SEND")
+  const [payoutType, setPayoutType] = React.useState<PayoutType>("REGULAR")
+  const [trackingNumber, setTrackingNumber] = React.useState("")
+  const [shippingDate, setShippingDate] = React.useState("")
+  const [peaReceivedDate, setPeaReceivedDate] = React.useState("")
+  const [carrierName, setCarrierName] = React.useState("ไปรษณีย์ไทย EMS")
+  const [updatingPayout, setUpdatingPayout] = React.useState(false)
 
   // Edit form state
   const [editDocType, setEditDocType] = React.useState<DocType>("INV_ELEC")
@@ -139,6 +161,17 @@ function DocumentDetailContent() {
       }
       const data: DocumentWithItems = await res.json()
       setDocument(data)
+
+      // Populate tracking state
+      setPayoutStatus((data.payoutStatus as PayoutStatus) || "WAITING_SEND")
+      setPayoutType((data.payoutType as PayoutType) || "REGULAR")
+      setTrackingNumber(data.trackingNumber || "")
+      setShippingDate(
+        data.shippingDate ? new Date(data.shippingDate).toISOString().split("T")[0] : ""
+      )
+      setPeaReceivedDate(
+        data.peaReceivedDate ? new Date(data.peaReceivedDate).toISOString().split("T")[0] : ""
+      )
 
       // Populate form state
       setEditDocType(data.docType as DocType)
@@ -199,6 +232,93 @@ function DocumentDetailContent() {
       setLoading(false)
     }
   }, [id, toast])
+
+  const handleQuickPayoutUpdate = async (customPayload?: Partial<{
+    payoutStatus: PayoutStatus
+    payoutType: PayoutType
+    trackingNumber: string
+    shippingDate: string
+    peaReceivedDate: string
+    status: string
+  }>) => {
+    try {
+      setUpdatingPayout(true)
+      const nextPayoutStatus = customPayload?.payoutStatus || payoutStatus
+      const nextPayoutType = customPayload?.payoutType || payoutType
+      const nextTrackingNumber = customPayload?.trackingNumber !== undefined ? customPayload.trackingNumber : trackingNumber
+      const nextShippingDate = customPayload?.shippingDate !== undefined ? customPayload.shippingDate : shippingDate
+      const nextPeaReceivedDate = customPayload?.peaReceivedDate !== undefined ? customPayload.peaReceivedDate : peaReceivedDate
+
+      const payload: any = {
+        payoutStatus: nextPayoutStatus,
+        payoutType: nextPayoutType,
+        trackingNumber: nextTrackingNumber.trim(),
+        shippingDate: nextShippingDate || null,
+        peaReceivedDate: nextPeaReceivedDate || null,
+      }
+
+      if (nextPayoutStatus === "PAID") {
+        payload.status = "PAID"
+        payload.paymentDate = new Date().toISOString()
+      }
+
+      const res = await fetch(`/api/documents/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "เกิดข้อผิดพลาดในการอัปเดต")
+      }
+
+      toast({
+        title: "อัปเดตสถานะการเบิกเงินสำเร็จ",
+        description: `อัปเดตสถานะของเอกสาร ${document?.docNumber} เรียบร้อยแล้ว`,
+      })
+
+      setTrackingModalOpen(false)
+      await fetchDocument()
+    } catch (err: any) {
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingPayout(false)
+    }
+  }
+
+  const handleCopyLineMessage = () => {
+    if (!document) return
+    const month =
+      document.billingMonth && document.billingMonth >= 1 && document.billingMonth <= 12
+        ? THAI_MONTHS[document.billingMonth - 1]
+        : ""
+    const yearTh = document.billingYear ? document.billingYear + 543 : ""
+
+    const msg = generatePeaLineMessage({
+      stationName: document.stationName || "สถานีบริการ PEA VOLTA",
+      billingMonthYear: `${month} ${yearTh}`,
+      invNumber: document.docType.startsWith("INV_")
+        ? document.docNumber
+        : (document.refInvoice?.docNumber || document.docNumber),
+      recNumber: document.docType.startsWith("REC_")
+        ? document.docNumber
+        : (document.receipts?.[0]?.docNumber),
+      amount: document.netPayable,
+      trackingNumber: document.trackingNumber || trackingNumber || "(รอระบุเลขพัสดุ)",
+      carrier: carrierName || "ไปรษณีย์ไทย EMS",
+    })
+
+    navigator.clipboard.writeText(msg)
+    toast({
+      title: "คัดลอกข้อความสำเร็จ",
+      description: "คัดลอกข้อความสำหรับส่งแจ้งเจ้าหน้าที่ กฟภ. ทาง LINE เรียบร้อยแล้ว",
+    })
+  }
 
   React.useEffect(() => {
     fetchDocument()
@@ -639,6 +759,272 @@ function DocumentDetailContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* PEA Payout & SLA Tracking Card */}
+          {((document.docType.includes("ELEC")) || document.customerName?.includes("การไฟฟ้า") || !!document.payoutStatus) && (
+            <Card className="border-purple-200 bg-gradient-to-br from-white via-purple-50/20 to-indigo-50/30 shadow-sm overflow-hidden">
+              <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500" />
+              <CardHeader className="pb-3 pt-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
+                      <Truck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        ติดตามสถานะการจัดส่ง & เบิกเงิน กฟภ. (PEA Payout & SLA)
+                        <Badge
+                          variant="outline"
+                          className={`${
+                            PAYOUT_STATUS_LABELS[document.payoutStatus || "WAITING_SEND"]?.color ||
+                            "bg-slate-100"
+                          } font-medium`}
+                        >
+                          {PAYOUT_STATUS_LABELS[document.payoutStatus || "WAITING_SEND"]?.label ||
+                            "1. รอส่งเอกสาร"}
+                        </Badge>
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        {document.payoutType === "FIRST_TIME"
+                          ? "ขอเบิกครั้งแรก (SLA 45 วันทำการ หลัง กฟภ. ลงรับเอกสารตัวจริง)"
+                          : "รอบบิลปกติ (SLA 30 วันทำการ หลัง กฟภ. ลงรับเอกสารตัวจริง)"}
+                      </CardDescription>
+                    </div>
+                  </div>
+
+                  {/* Actions in header */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCopyLineMessage}
+                      className="gap-1.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 h-8"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      คัดลอกข้อความ LINE แจ้ง กฟภ.
+                    </Button>
+
+                    <Link href={`/envelope?docId=${document.id}`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs text-purple-700 border-purple-300 hover:bg-purple-50 h-8"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        พิมพ์ใบปะหน้าซอง
+                      </Button>
+                    </Link>
+
+                    <Button
+                      size="sm"
+                      onClick={() => setTrackingModalOpen(true)}
+                      className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white h-8"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      อัปเดตสถานะ / เลขพัสดุ
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {/* 4-Step Visual Progress Bar */}
+                {(() => {
+                  const currentStatus = document.payoutStatus || "WAITING_SEND"
+                  const stepIndex =
+                    currentStatus === "PAID"
+                      ? 4
+                      : currentStatus === "PEA_RECEIVED"
+                      ? 3
+                      : currentStatus === "SENT"
+                      ? 2
+                      : 1
+
+                  const steps = [
+                    { step: 1, key: "WAITING_SEND", title: "1. รอส่งเอกสาร", desc: "พิมพ์เอกสารตัวจริงและใบปะหน้า" },
+                    { step: 2, key: "SENT", title: "2. ส่งไปรษณีย์แล้ว", desc: "จัดส่ง EMS พร้อมเลขพัสดุ" },
+                    { step: 3, key: "PEA_RECEIVED", title: "3. กฟภ. ลงรับแล้ว", desc: "เริ่มนับเวลา SLA วันทำการ" },
+                    { step: 4, key: "PAID", title: "4. ได้รับเงินโอนแล้ว", desc: "เงินเข้าบัญชีตามรอบเบิกจ่าย" },
+                  ]
+
+                  return (
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        {steps.map((st) => {
+                          const isDone = stepIndex > st.step
+                          const isCurrent = stepIndex === st.step
+                          return (
+                            <div
+                              key={st.key}
+                              onClick={() => {
+                                handleQuickPayoutUpdate({ payoutStatus: st.key as PayoutStatus })
+                              }}
+                              className={`flex flex-col p-3 rounded-lg border text-left cursor-pointer transition-all ${
+                                isCurrent
+                                  ? "border-purple-500 bg-purple-50/70 shadow-sm"
+                                  : isDone
+                                  ? "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70"
+                                  : "border-slate-200 bg-slate-50/50 hover:bg-slate-100 text-slate-400"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span
+                                  className={`text-xs font-bold ${
+                                    isCurrent
+                                      ? "text-purple-900"
+                                      : isDone
+                                      ? "text-emerald-700"
+                                      : "text-slate-500"
+                                  }`}
+                                >
+                                  {st.title}
+                                </span>
+                                {isDone ? (
+                                  <Check className="h-4 w-4 text-emerald-600 font-bold" />
+                                ) : isCurrent ? (
+                                  <Clock className="h-4 w-4 text-purple-600 animate-pulse" />
+                                ) : (
+                                  <div className="h-2 w-2 rounded-full bg-slate-300" />
+                                )}
+                              </div>
+                              <span className="text-[11px] text-slate-500">{st.desc}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* SLA Countdown & Info Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Tracking Number Box */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-3.5">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      เลขพัสดุจัดส่ง (ไปรษณีย์ไทย EMS)
+                    </span>
+                    <div className="mt-1 flex items-center justify-between">
+                      {document.trackingNumber ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-base font-bold text-blue-700">
+                            {document.trackingNumber}
+                          </span>
+                          <a
+                            href={`https://track.thailandpost.co.th/?trackNumber=${document.trackingNumber}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-slate-400 hover:text-blue-600"
+                            title="ตรวจสอบสถานะพัสดุในเว็บไปรษณีย์ไทย"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">ยังไม่ระบุเลขพัสดุ</span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setTrackingModalOpen(true)}
+                        className="h-7 text-xs text-purple-700 hover:bg-purple-50"
+                      >
+                        {document.trackingNumber ? "แก้ไข" : "+ เพิ่มเลขพัสดุ"}
+                      </Button>
+                    </div>
+                    {document.shippingDate && (
+                      <span className="text-[11px] text-slate-500 block mt-1">
+                        ส่งเมื่อ: {formatDate(document.shippingDate)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* PEA Received Date Box */}
+                  <div className="rounded-lg border border-slate-200 bg-white p-3.5">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      วันที่ กฟภ. ลงรับเอกสารตัวจริง
+                    </span>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="font-semibold text-slate-800 text-sm">
+                        {document.peaReceivedDate ? formatDate(document.peaReceivedDate) : "-"}
+                      </span>
+                      {document.peaReceivedDate ? (
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">
+                          รับแล้ว
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-amber-600">รอกฟภ. ลงรับ</span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-500 block mt-1">
+                      ส่งถึง: นางสาวระวีพร บุญพิทักษ์ (ชั้น 5 LED)
+                    </span>
+                  </div>
+
+                  {/* SLA Countdown Badge Box */}
+                  <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-3.5 flex flex-col justify-between">
+                    <span className="text-xs font-semibold text-purple-800 uppercase tracking-wider block">
+                      ระยะเวลารอชำระเงิน (SLA Countdown)
+                    </span>
+
+                    <div className="mt-1.5">
+                      {document.payoutStatus === "PAID" ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ได้รับเงินโอนจาก กฟภ. เรียบร้อยแล้ว
+                        </div>
+                      ) : document.payoutStatus === "PEA_RECEIVED" && document.estimatedPayoutDate ? (
+                        (() => {
+                          const remainingDays = getRemainingBusinessDays(document.estimatedPayoutDate)
+                          return (
+                            <div>
+                              <div className="flex items-center gap-1.5 font-bold text-sm text-purple-900">
+                                <Clock className="h-4 w-4 text-purple-600" />
+                                {remainingDays > 0 ? (
+                                  <span>
+                                    เหลืออีก{" "}
+                                    <strong className="text-base text-purple-700">
+                                      {remainingDays}
+                                    </strong>{" "}
+                                    วันทำการ
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-700">ครบกำหนด SLA แล้ว (กรุณาติดตาม)</span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-slate-600 block mt-0.5">
+                                กำหนดจ่ายเงินโดยประมาณ:{" "}
+                                <strong>{formatThaiDateDots(document.estimatedPayoutDate)}</strong>
+                              </span>
+                            </div>
+                          )
+                        })()
+                      ) : document.payoutStatus === "SENT" ? (
+                        <div className="text-xs text-blue-800">
+                          <div className="font-semibold flex items-center gap-1">
+                            <Truck className="h-4 w-4 text-blue-600" />
+                            เอกสารกำลังจัดส่งไปยัง กฟภ.
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            นับ SLA {document.payoutType === "FIRST_TIME" ? 45 : 30} วันทำการเมื่อ กฟภ. ลงรับ
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-amber-800">
+                          <div className="font-semibold flex items-center gap-1">
+                            <Clock className="h-4 w-4 text-amber-600" />
+                            ยังไม่ได้จัดส่งเอกสารตัวจริง
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            พิมพ์เอกสารพร้อมใบปะหน้าซองเพื่อส่ง EMS
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Customer Info Card */}
           <Card>
@@ -1347,6 +1733,122 @@ function DocumentDetailContent() {
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               ยืนยันการลบ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PEA Tracking & Payout Edit Modal Dialog */}
+      <Dialog open={trackingModalOpen} onOpenChange={setTrackingModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-900">
+              <Truck className="h-5 w-5 text-purple-600" />
+              อัปเดตสถานะจัดส่ง & การเบิกเงิน กฟภ.
+            </DialogTitle>
+            <DialogDescription>
+              เอกสารเลขที่ <strong>{document?.docNumber}</strong> ({document?.stationName})
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>สถานะการเบิกเงิน (Payout Status)</Label>
+              <Select
+                value={payoutStatus}
+                onValueChange={(val: PayoutStatus) => setPayoutStatus(val)}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="WAITING_SEND">1. รอส่งเอกสารตัวจริง</SelectItem>
+                  <SelectItem value="SENT">2. จัดส่งไปรษณีย์แล้ว (มีเลขพัสดุ)</SelectItem>
+                  <SelectItem value="PEA_RECEIVED">3. กฟภ. ได้รับเอกสารแล้ว (เริ่มนับ SLA)</SelectItem>
+                  <SelectItem value="PAID">4. กฟภ. โอนเงินเข้าบัญชีแล้ว (ชำระเสร็จสิ้น)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>ประเภทการขอเบิก (Payout Type)</Label>
+              <Select
+                value={payoutType}
+                onValueChange={(val: PayoutType) => setPayoutType(val)}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="REGULAR">รอบบิลปกติ (SLA 30 วันทำการ)</SelectItem>
+                  <SelectItem value="FIRST_TIME">ขอเบิกครั้งแรก (SLA 45 วันทำการ)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>เลขพัสดุ (Tracking No.)</Label>
+                <Input
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder="เช่น ED839281745TH"
+                  className="mt-1.5 font-mono"
+                />
+              </div>
+
+              <div>
+                <Label>ผู้ให้บริการจัดส่ง</Label>
+                <Input
+                  value={carrierName}
+                  onChange={(e) => setCarrierName(e.target.value)}
+                  placeholder="ไปรษณีย์ไทย EMS"
+                  className="mt-1.5"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>วันที่จัดส่ง</Label>
+                <Input
+                  type="date"
+                  value={shippingDate}
+                  onChange={(e) => setShippingDate(e.target.value)}
+                  className="mt-1.5"
+                />
+              </div>
+
+              <div>
+                <Label>วันที่ กฟภ. ลงรับเอกสาร</Label>
+                <Input
+                  type="date"
+                  value={peaReceivedDate}
+                  onChange={(e) => setPeaReceivedDate(e.target.value)}
+                  className="mt-1.5"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  * จะเริ่มคำนวณวันครบกำหนดตาม SLA อัตโนมัติ
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setTrackingModalOpen(false)}
+              disabled={updatingPayout}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={() => handleQuickPayoutUpdate()}
+              disabled={updatingPayout}
+              className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {updatingPayout ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 import { ThaiBahtText } from "@/lib/thai-baht-text"
-import { calculateAllTotals, getDefaultWhtRate } from "@/lib/calculations"
-import { DOC_TYPE_PREFIXES } from "@/lib/utils"
+import { calculateAllTotals, getDefaultWhtRate, calculatePeaVoltaRevenue, addBusinessDays } from "@/lib/calculations"
+import { DOC_TYPE_PREFIXES, PEA_HEADQUARTERS } from "@/lib/utils"
+import { PeaMonthlyFee, PayoutStatus, PayoutType } from "@/types"
 
 export interface MockItem {
   id: string
@@ -50,6 +51,23 @@ export interface MockDocument {
   items: MockItem[]
   refInvoice?: MockDocument | null
   receipts?: MockDocument[]
+  
+  // PEA VOLTA Exact Compliance Fields
+  isVatRegistered?: boolean
+  branchNumber?: string
+  totalKwh?: number | null
+  ratePerKwh?: number | null
+  totalRawAmount?: number | null
+  peaFeeAmount?: number | null
+  totalClaim95?: number | null
+
+  // Payout Tracking & SLA
+  payoutStatus?: PayoutStatus
+  payoutType?: PayoutType
+  trackingNumber?: string | null
+  shippingDate?: string | null
+  peaReceivedDate?: string | null
+  estimatedPayoutDate?: string | null
 }
 
 export interface MockSettings {
@@ -62,6 +80,12 @@ export interface MockSettings {
   bankName: string
   bankAccountNo: string
   bankAccountName: string
+  bankBranch: string
+  bankAccountType: "SAVINGS" | "CURRENT"
+  contactPerson: string
+  contactPhone: string
+  isVatRegistered: boolean
+  branchNumber: string
   signerName: string
   signerTitle: string
   logoUrl: string
@@ -83,381 +107,372 @@ let mockSettings: MockSettings = {
   bankName: "ธนาคารกสิกรไทย",
   bankAccountNo: "123-4-56789-0",
   bankAccountName: "บริษัท กรีนชาร์จ พร็อพเพอร์ตี้ จำกัด",
+  bankBranch: "สาขาคลองหลวง",
+  bankAccountType: "SAVINGS",
+  contactPerson: "นายสมชาย รักษ์พลังงาน",
+  contactPhone: "081-234-5678",
+  isVatRegistered: true,
+  branchNumber: "สำนักงานใหญ่",
   signerName: "นายสมชาย รักษ์พลังงาน",
   signerTitle: "กรรมการผู้จัดการ",
   logoUrl: "",
-  defaultCustomerName: "การไฟฟ้าส่วนภูมิภาค",
-  defaultCustomerAddress: "200 ถนนงามวงศ์วาน แขวงลาดยาว เขตจตุจักร กรุงเทพฯ 10900",
-  defaultCustomerTaxId: "0994000165509",
-  defaultCustomerBranch: "สำนักงานใหญ่",
+  defaultCustomerName: PEA_HEADQUARTERS.name,
+  defaultCustomerAddress: PEA_HEADQUARTERS.address,
+  defaultCustomerTaxId: PEA_HEADQUARTERS.taxId,
+  defaultCustomerBranch: PEA_HEADQUARTERS.branch,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 }
 
-let mockDocuments: MockDocument[] = []
+let mockMonthlyFees: PeaMonthlyFee[] = [
+  {
+    id: "fee-202610",
+    billingMonth: 10,
+    billingYear: 2026,
+    stationName: "สถานีชาร์จ กรีนชาร์จ คลองหลวง",
+    ref1Contract: "020018475923",
+    ref2Invoice: "910248593821",
+    amount: 1605.0,
+    paymentDate: "2026-10-05T10:30:00.000Z",
+    paymentChannel: "PEA_SMART_PLUS",
+    status: "PAID",
+    notes: "ชำระค่าบริการรายเดือนผ่านแอป PEA SMART Plus เรียบร้อยแล้ว",
+    createdAt: "2026-10-05T10:30:00.000Z",
+  },
+  {
+    id: "fee-202609",
+    billingMonth: 9,
+    billingYear: 2026,
+    stationName: "สถานีชาร์จ กรีนชาร์จ คลองหลวง",
+    ref1Contract: "020018475923",
+    ref2Invoice: "910247482910",
+    amount: 1605.0,
+    paymentDate: "2026-09-05T11:15:00.000Z",
+    paymentChannel: "PEA_SMART_PLUS",
+    status: "PAID",
+    notes: "ชำระค่าบริการรายเดือนผ่านแอป PEA SMART Plus เรียบร้อย",
+    createdAt: "2026-09-05T11:15:00.000Z",
+  },
+  {
+    id: "fee-202608",
+    billingMonth: 8,
+    billingYear: 2026,
+    stationName: "สถานีชาร์จ กรีนชาร์จ คลองหลวง",
+    ref1Contract: "020018475923",
+    ref2Invoice: "910246372819",
+    amount: 1605.0,
+    paymentDate: "2026-08-04T09:45:00.000Z",
+    paymentChannel: "PEA_SMART_PLUS",
+    status: "PAID",
+    notes: "ชำระผ่านเคาน์เตอร์ กฟภ.",
+    createdAt: "2026-08-04T09:45:00.000Z",
+  },
+]
 
 function initMockDocuments(): MockDocument[] {
   const defaultCust = {
-    customerName: mockSettings.defaultCustomerName,
-    customerAddress: mockSettings.defaultCustomerAddress,
-    customerTaxId: mockSettings.defaultCustomerTaxId,
-    customerBranch: mockSettings.defaultCustomerBranch,
+    customerName: PEA_HEADQUARTERS.name,
+    customerAddress: PEA_HEADQUARTERS.address,
+    customerTaxId: PEA_HEADQUARTERS.taxId,
+    customerBranch: PEA_HEADQUARTERS.branch,
     contractRef: "สัญญาเลขที่ EV-PEA-2025/089",
     stationName: "สถานีชาร์จ กรีนชาร์จ คลองหลวง",
   }
 
-  // 1. July Electricity Invoice
-  const itJulElec = [
-    {
-      id: "it-jul-elec-1",
-      documentId: "doc-inv-jul-elec",
-      itemOrder: 1,
-      description: "ค่าส่วนต่างกระแสไฟฟ้า สถานีชาร์จ กรีนชาร์จ คลองหลวง ประจำเดือน กรกฎาคม 2569 (ราคาขาย 6.50 บาท - ต้นทุน 4.50 บาท)",
-      quantity: 6450,
-      unitName: "kWh",
-      unitPrice: 2.0,
-      amount: 12900.0,
-      meterPrevious: 124550.0,
-      meterCurrent: 131000.0,
-    },
-  ]
-  const totJulElec = calculateAllTotals(itJulElec, true, 7, true, 3)
-  const docJulElec: MockDocument = {
-    id: "doc-inv-jul-elec",
-    docNumber: "INV-EV-202607-001",
-    docType: "INV_ELEC",
-    refInvoiceId: null,
-    issueDate: "2026-07-31T00:00:00.000Z",
-    dueDate: "2026-08-15T00:00:00.000Z",
-    billingMonth: 7,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totJulElec,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-08-10T09:30:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "KTB-TRF-20260810-771",
-    notes: "ชำระเงินเรียบร้อยแล้วผ่านธนาคารกรุงไทย",
-    thaiBahtText: ThaiBahtText(totJulElec.netPayable),
-    createdAt: "2026-07-31T08:00:00.000Z",
-    updatedAt: "2026-08-10T09:30:00.000Z",
-    items: itJulElec,
-  }
+  // Example PEA Calculation:
+  // 47,263.40 kWh @ 6.90 = 326,117.46 (100% Excl VAT)
+  // Fee 5% = 16,305.87
+  // 95% Claim = 309,811.59
+  // VAT 7% = 21,686.81
+  // Total = 331,498.40
+  const peaCalcSep = calculatePeaVoltaRevenue({
+    rawAmount: 326117.46,
+    isVatRegistered: true,
+  })
 
-  // 2. July Electricity Receipt
-  const recJulElec: MockDocument = {
-    id: "doc-rec-jul-elec",
-    docNumber: "REC-EV-202607-001",
-    docType: "REC_ELEC",
-    refInvoiceId: docJulElec.id,
-    issueDate: "2026-08-10T09:30:00.000Z",
-    dueDate: null,
-    billingMonth: 7,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totJulElec,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-08-10T09:30:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "KTB-TRF-20260810-771",
-    notes: "รับชำระค่าส่วนต่างไฟฟ้าเรียบร้อย",
-    thaiBahtText: ThaiBahtText(totJulElec.netPayable),
-    createdAt: "2026-08-10T09:30:00.000Z",
-    updatedAt: "2026-08-10T09:30:00.000Z",
-    items: itJulElec.map(i => ({ ...i, id: "it-rec-jul-elec-1", documentId: "doc-rec-jul-elec" })),
-  }
-
-  // 3. July Rent Invoice
-  const itJulRent = [
-    {
-      id: "it-jul-rent-1",
-      documentId: "doc-inv-jul-rent",
-      itemOrder: 1,
-      description: "ค่าเช่าพื้นที่ติดตั้งสถานีชาร์จยานยนต์ไฟฟ้า ประจำเดือน กรกฎาคม 2569",
-      quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 25000.0,
-      amount: 25000.0,
-      meterPrevious: null,
-      meterCurrent: null,
-    },
-    {
-      id: "it-jul-rent-2",
-      documentId: "doc-inv-jul-rent",
-      itemOrder: 2,
-      description: "ค่าบริการพื้นที่ส่วนกลางและรักษาความสะอาด ประจำเดือน กรกฎาคม 2569",
-      quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 3500.0,
-      amount: 3500.0,
-      meterPrevious: null,
-      meterCurrent: null,
-    },
-  ]
-  const totJulRent = calculateAllTotals(itJulRent, true, 7, true, 5)
-  const docJulRent: MockDocument = {
-    id: "doc-inv-jul-rent",
-    docNumber: "INV-RENT-202607-001",
-    docType: "INV_RENT",
-    refInvoiceId: null,
-    issueDate: "2026-07-01T00:00:00.000Z",
-    dueDate: "2026-07-15T00:00:00.000Z",
-    billingMonth: 7,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totJulRent,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-07-12T14:15:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "BBL-TRF-20260712-452",
-    notes: "ชำระตรงตามกำหนดเวลา",
-    thaiBahtText: ThaiBahtText(totJulRent.netPayable),
-    createdAt: "2026-07-01T09:00:00.000Z",
-    updatedAt: "2026-07-12T14:15:00.000Z",
-    items: itJulRent,
-  }
-
-  // 4. July Rent Receipt
-  const recJulRent: MockDocument = {
-    id: "doc-rec-jul-rent",
-    docNumber: "REC-RENT-202607-001",
-    docType: "REC_RENT",
-    refInvoiceId: docJulRent.id,
-    issueDate: "2026-07-12T14:15:00.000Z",
-    dueDate: null,
-    billingMonth: 7,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totJulRent,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-07-12T14:15:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "BBL-TRF-20260712-452",
-    notes: "ออกใบเสร็จรับเงินค่าเช่าพื้นที่",
-    thaiBahtText: ThaiBahtText(totJulRent.netPayable),
-    createdAt: "2026-07-12T14:15:00.000Z",
-    updatedAt: "2026-07-12T14:15:00.000Z",
-    items: itJulRent.map(i => ({ ...i, id: `it-rec-jul-rent-${i.itemOrder}`, documentId: "doc-rec-jul-rent" })),
-  }
-
-  // 5. August Electricity Invoice
-  const itAugElec = [
-    {
-      id: "it-aug-elec-1",
-      documentId: "doc-inv-aug-elec",
-      itemOrder: 1,
-      description: "ค่าส่วนต่างกระแสไฟฟ้า สถานีชาร์จ กรีนชาร์จ คลองหลวง ประจำเดือน สิงหาคม 2569 (ราคาขาย 6.50 บาท - ต้นทุน 4.50 บาท)",
-      quantity: 7200,
-      unitName: "kWh",
-      unitPrice: 2.0,
-      amount: 14400.0,
-      meterPrevious: 131000.0,
-      meterCurrent: 138200.0,
-    },
-  ]
-  const totAugElec = calculateAllTotals(itAugElec, true, 7, true, 3)
-  const docAugElec: MockDocument = {
-    id: "doc-inv-aug-elec",
-    docNumber: "INV-EV-202608-001",
-    docType: "INV_ELEC",
-    refInvoiceId: null,
-    issueDate: "2026-08-31T00:00:00.000Z",
-    dueDate: "2026-09-15T00:00:00.000Z",
-    billingMonth: 8,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totAugElec,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-09-10T11:00:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "KTB-TRF-20260910-882",
-    notes: "รับชำระเรียบร้อย",
-    thaiBahtText: ThaiBahtText(totAugElec.netPayable),
-    createdAt: "2026-08-31T08:00:00.000Z",
-    updatedAt: "2026-09-10T11:00:00.000Z",
-    items: itAugElec,
-  }
-
-  // 6. August Electricity Receipt
-  const recAugElec: MockDocument = {
-    id: "doc-rec-aug-elec",
-    docNumber: "REC-EV-202608-001",
-    docType: "REC_ELEC",
-    refInvoiceId: docAugElec.id,
-    issueDate: "2026-09-10T11:00:00.000Z",
-    dueDate: null,
-    billingMonth: 8,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totAugElec,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-09-10T11:00:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "KTB-TRF-20260910-882",
-    notes: "ออกใบเสร็จรับเงินค่าส่วนต่างไฟฟ้า",
-    thaiBahtText: ThaiBahtText(totAugElec.netPayable),
-    createdAt: "2026-09-10T11:00:00.000Z",
-    updatedAt: "2026-09-10T11:00:00.000Z",
-    items: itAugElec.map(i => ({ ...i, id: "it-rec-aug-elec-1", documentId: "doc-rec-aug-elec" })),
-  }
-
-  // 7. August Rent Invoice
-  const itAugRent = [
-    {
-      id: "it-aug-rent-1",
-      documentId: "doc-inv-aug-rent",
-      itemOrder: 1,
-      description: "ค่าเช่าพื้นที่ติดตั้งสถานีชาร์จยานยนต์ไฟฟ้า ประจำเดือน สิงหาคม 2569",
-      quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 25000.0,
-      amount: 25000.0,
-      meterPrevious: null,
-      meterCurrent: null,
-    },
-    {
-      id: "it-aug-rent-2",
-      documentId: "doc-inv-aug-rent",
-      itemOrder: 2,
-      description: "ค่าบริการพื้นที่ส่วนกลางและรักษาความสะอาด ประจำเดือน สิงหาคม 2569",
-      quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 3500.0,
-      amount: 3500.0,
-      meterPrevious: null,
-      meterCurrent: null,
-    },
-  ]
-  const totAugRent = calculateAllTotals(itAugRent, true, 7, true, 5)
-  const docAugRent: MockDocument = {
-    id: "doc-inv-aug-rent",
-    docNumber: "INV-RENT-202608-001",
-    docType: "INV_RENT",
-    refInvoiceId: null,
-    issueDate: "2026-08-01T00:00:00.000Z",
-    dueDate: "2026-08-15T00:00:00.000Z",
-    billingMonth: 8,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totAugRent,
-    enableVat: true,
-    enableWht: true,
-    status: "PAID",
-    paymentDate: "2026-08-14T10:20:00.000Z",
-    paymentMethod: "TRANSFER",
-    paymentRef: "SCB-TRF-20260814-119",
-    notes: "ชำระเงินเรียบร้อย",
-    thaiBahtText: ThaiBahtText(totAugRent.netPayable),
-    createdAt: "2026-08-01T09:00:00.000Z",
-    updatedAt: "2026-08-14T10:20:00.000Z",
-    items: itAugRent,
-  }
-
-  // 8. September Electricity Invoice (PENDING)
+  // 1. September 2026 Electricity Invoice (PEA Claim - PENDING, Sent via EMS)
   const itSepElec = [
     {
       id: "it-sep-elec-1",
       documentId: "doc-inv-sep-elec",
       itemOrder: 1,
-      description: "ค่าส่วนต่างกระแสไฟฟ้า สถานีชาร์จ กรีนชาร์จ คลองหลวง ประจำเดือน กันยายน 2569 (ราคาขาย 6.50 บาท - ต้นทุน 4.50 บาท)",
-      quantity: 8100,
-      unitName: "kWh",
-      unitPrice: 2.0,
-      amount: 16200.0,
-      meterPrevious: 138200.0,
-      meterCurrent: 146300.0,
+      description: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน กันยายน 2569 ของสถานีบริการ กรีนชาร์จ คลองหลวง",
+      quantity: 1,
+      unitName: "Unit",
+      unitPrice: peaCalcSep.totalClaim95,
+      amount: peaCalcSep.totalClaim95,
+      meterPrevious: null,
+      meterCurrent: null,
     },
   ]
-  const totSepElec = calculateAllTotals(itSepElec, true, 7, true, 3)
+
   const docSepElec: MockDocument = {
     id: "doc-inv-sep-elec",
     docNumber: "INV-EV-202609-001",
     docType: "INV_ELEC",
     refInvoiceId: null,
     issueDate: "2026-09-30T00:00:00.000Z",
-    dueDate: "2026-10-15T00:00:00.000Z",
+    dueDate: "2026-10-30T00:00:00.000Z",
     billingMonth: 9,
     billingYear: 2026,
     ...defaultCust,
-    ...totSepElec,
+    subtotal: peaCalcSep.totalClaim95,
+    vatRate: 7,
+    vatAmount: peaCalcSep.vatAmount,
+    whtRate: 0,
+    whtAmount: 0,
+    grandTotal: peaCalcSep.grandTotal,
+    netPayable: peaCalcSep.netPayable,
     enableVat: true,
-    enableWht: true,
+    enableWht: false,
     status: "PENDING",
     paymentDate: null,
     paymentMethod: null,
     paymentRef: null,
-    notes: "ส่งวางบิลเรียบร้อย รอการไฟฟ้าส่วนภูมิภาคดำเนินการจ่ายเงิน",
-    thaiBahtText: ThaiBahtText(totSepElec.netPayable),
+    notes: "ส่งเอกสารทางไปรษณีย์ EMS ถึง กฟภ. เรียบร้อยแล้ว",
+    thaiBahtText: ThaiBahtText(peaCalcSep.netPayable),
     createdAt: "2026-09-30T08:00:00.000Z",
-    updatedAt: "2026-09-30T08:00:00.000Z",
+    updatedAt: "2026-10-02T10:00:00.000Z",
     items: itSepElec,
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
+    totalRawAmount: peaCalcSep.totalRawAmount,
+    peaFeeAmount: peaCalcSep.peaFeeAmount,
+    totalClaim95: peaCalcSep.totalClaim95,
+    payoutStatus: "PEA_RECEIVED",
+    payoutType: "REGULAR",
+    trackingNumber: "ED839281745TH",
+    shippingDate: "2026-10-01T09:00:00.000Z",
+    peaReceivedDate: "2026-10-03T11:00:00.000Z",
+    estimatedPayoutDate: addBusinessDays("2026-10-03", 30).toISOString(),
   }
 
-  // 9. September Rent Invoice (PENDING)
-  const itSepRent = [
+  // 2. September 2026 Electricity Receipt / Tax Invoice (Paired with Invoice)
+  const recSepElec: MockDocument = {
+    id: "doc-rec-sep-elec",
+    docNumber: "REC-EV-202609-001",
+    docType: "REC_ELEC",
+    refInvoiceId: docSepElec.id,
+    issueDate: "2026-10-01T09:00:00.000Z", // strictly > invoice date!
+    dueDate: null,
+    billingMonth: 9,
+    billingYear: 2026,
+    ...defaultCust,
+    subtotal: peaCalcSep.totalClaim95,
+    vatRate: 7,
+    vatAmount: peaCalcSep.vatAmount,
+    whtRate: 0,
+    whtAmount: 0,
+    grandTotal: peaCalcSep.grandTotal,
+    netPayable: peaCalcSep.netPayable,
+    enableVat: true,
+    enableWht: false,
+    status: "PENDING",
+    paymentDate: null,
+    paymentMethod: "TRANSFER",
+    paymentRef: null,
+    notes: "ออกคู่กับใบแจ้งหนี้เพื่อส่งวางบิล กฟภ. พร้อมกัน",
+    thaiBahtText: ThaiBahtText(peaCalcSep.netPayable),
+    createdAt: "2026-10-01T09:00:00.000Z",
+    updatedAt: "2026-10-01T09:00:00.000Z",
+    items: [
+      {
+        id: "it-rec-sep-elec-1",
+        documentId: "doc-rec-sep-elec",
+        itemOrder: 1,
+        description: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน กันยายน 2569 ของสถานีบริการ กรีนชาร์จ คลองหลวง",
+        quantity: 1,
+        unitName: "Unit",
+        unitPrice: peaCalcSep.totalClaim95,
+        amount: peaCalcSep.totalClaim95,
+        meterPrevious: null,
+        meterCurrent: null,
+      },
+    ],
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
+    totalRawAmount: peaCalcSep.totalRawAmount,
+    peaFeeAmount: peaCalcSep.peaFeeAmount,
+    totalClaim95: peaCalcSep.totalClaim95,
+    payoutStatus: "PEA_RECEIVED",
+    payoutType: "REGULAR",
+    trackingNumber: "ED839281745TH",
+    shippingDate: "2026-10-01T09:00:00.000Z",
+    peaReceivedDate: "2026-10-03T11:00:00.000Z",
+    estimatedPayoutDate: addBusinessDays("2026-10-03", 30).toISOString(),
+  }
+
+  // 3. August 2026 Electricity Claim (PAID)
+  const peaCalcAug = calculatePeaVoltaRevenue({
+    rawAmount: 280000.0,
+    isVatRegistered: true,
+  })
+  const itAugElec = [
     {
-      id: "it-sep-rent-1",
-      documentId: "doc-inv-sep-rent",
+      id: "it-aug-elec-1",
+      documentId: "doc-inv-aug-elec",
       itemOrder: 1,
-      description: "ค่าเช่าพื้นที่ติดตั้งสถานีชาร์จยานยนต์ไฟฟ้า ประจำเดือน กันยายน 2569",
+      description: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน สิงหาคม 2569 ของสถานีบริการ กรีนชาร์จ คลองหลวง",
       quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 25000.0,
-      amount: 25000.0,
-      meterPrevious: null,
-      meterCurrent: null,
-    },
-    {
-      id: "it-sep-rent-2",
-      documentId: "doc-inv-sep-rent",
-      itemOrder: 2,
-      description: "ค่าบริการพื้นที่ส่วนกลางและรักษาความสะอาด ประจำเดือน กันยายน 2569",
-      quantity: 1,
-      unitName: "เดือน",
-      unitPrice: 3500.0,
-      amount: 3500.0,
+      unitName: "Unit",
+      unitPrice: peaCalcAug.totalClaim95,
+      amount: peaCalcAug.totalClaim95,
       meterPrevious: null,
       meterCurrent: null,
     },
   ]
-  const totSepRent = calculateAllTotals(itSepRent, true, 7, true, 5)
-  const docSepRent: MockDocument = {
-    id: "doc-inv-sep-rent",
-    docNumber: "INV-RENT-202609-001",
-    docType: "INV_RENT",
+  const docAugElec: MockDocument = {
+    id: "doc-inv-aug-elec",
+    docNumber: "INV-EV-202608-001",
+    docType: "INV_ELEC",
     refInvoiceId: null,
-    issueDate: "2026-09-01T00:00:00.000Z",
-    dueDate: "2026-09-15T00:00:00.000Z",
-    billingMonth: 9,
+    issueDate: "2026-08-31T00:00:00.000Z",
+    dueDate: "2026-09-30T00:00:00.000Z",
+    billingMonth: 8,
     billingYear: 2026,
     ...defaultCust,
-    ...totSepRent,
+    subtotal: peaCalcAug.totalClaim95,
+    vatRate: 7,
+    vatAmount: peaCalcAug.vatAmount,
+    whtRate: 0,
+    whtAmount: 0,
+    grandTotal: peaCalcAug.grandTotal,
+    netPayable: peaCalcAug.netPayable,
     enableVat: true,
-    enableWht: true,
+    enableWht: false,
+    status: "PAID",
+    paymentDate: "2026-09-28T14:20:00.000Z",
+    paymentMethod: "TRANSFER",
+    paymentRef: "PEA-KTB-20260928-091",
+    notes: "ได้รับเงินโอนจาก กฟภ. เรียบร้อยแล้ว",
+    thaiBahtText: ThaiBahtText(peaCalcAug.netPayable),
+    createdAt: "2026-08-31T08:00:00.000Z",
+    updatedAt: "2026-09-28T14:20:00.000Z",
+    items: itAugElec,
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
+    totalRawAmount: peaCalcAug.totalRawAmount,
+    peaFeeAmount: peaCalcAug.peaFeeAmount,
+    totalClaim95: peaCalcAug.totalClaim95,
+    payoutStatus: "PAID",
+    payoutType: "REGULAR",
+    trackingNumber: "ED748291038TH",
+    shippingDate: "2026-09-01T10:00:00.000Z",
+    peaReceivedDate: "2026-09-03T11:00:00.000Z",
+    estimatedPayoutDate: "2026-09-30T00:00:00.000Z",
+  }
+
+  // 4. August Receipt (PAID)
+  const recAugElec: MockDocument = {
+    id: "doc-rec-aug-elec",
+    docNumber: "REC-EV-202608-001",
+    docType: "REC_ELEC",
+    refInvoiceId: docAugElec.id,
+    issueDate: "2026-09-01T09:00:00.000Z",
+    dueDate: null,
+    billingMonth: 8,
+    billingYear: 2026,
+    ...defaultCust,
+    subtotal: peaCalcAug.totalClaim95,
+    vatRate: 7,
+    vatAmount: peaCalcAug.vatAmount,
+    whtRate: 0,
+    whtAmount: 0,
+    grandTotal: peaCalcAug.grandTotal,
+    netPayable: peaCalcAug.netPayable,
+    enableVat: true,
+    enableWht: false,
+    status: "PAID",
+    paymentDate: "2026-09-28T14:20:00.000Z",
+    paymentMethod: "TRANSFER",
+    paymentRef: "PEA-KTB-20260928-091",
+    notes: "ออกใบเสร็จรับเงิน/ใบกำกับภาษี เรียบร้อย",
+    thaiBahtText: ThaiBahtText(peaCalcAug.netPayable),
+    createdAt: "2026-09-01T09:00:00.000Z",
+    updatedAt: "2026-09-28T14:20:00.000Z",
+    items: [
+      {
+        id: "it-rec-aug-elec-1",
+        documentId: "doc-rec-aug-elec",
+        itemOrder: 1,
+        description: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน สิงหาคม 2569 ของสถานีบริการ กรีนชาร์จ คลองหลวง",
+        quantity: 1,
+        unitName: "Unit",
+        unitPrice: peaCalcAug.totalClaim95,
+        amount: peaCalcAug.totalClaim95,
+        meterPrevious: null,
+        meterCurrent: null,
+      },
+    ],
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
+    totalRawAmount: peaCalcAug.totalRawAmount,
+    peaFeeAmount: peaCalcAug.peaFeeAmount,
+    totalClaim95: peaCalcAug.totalClaim95,
+    payoutStatus: "PAID",
+  }
+
+  // 5. October Electricity Claim (Waiting to send)
+  const peaCalcOct = calculatePeaVoltaRevenue({
+    rawAmount: 154000.0,
+    isVatRegistered: true,
+  })
+  const itOctElec = [
+    {
+      id: "it-oct-elec-1",
+      documentId: "doc-inv-oct-elec",
+      itemOrder: 1,
+      description: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน ตุลาคม 2569 ของสถานีบริการ กรีนชาร์จ คลองหลวง",
+      quantity: 1,
+      unitName: "Unit",
+      unitPrice: peaCalcOct.totalClaim95,
+      amount: peaCalcOct.totalClaim95,
+      meterPrevious: null,
+      meterCurrent: null,
+    },
+  ]
+  const docOctElec: MockDocument = {
+    id: "doc-inv-oct-elec",
+    docNumber: "INV-EV-202610-001",
+    docType: "INV_ELEC",
+    refInvoiceId: null,
+    issueDate: "2026-10-14T00:00:00.000Z",
+    dueDate: "2026-11-14T00:00:00.000Z",
+    billingMonth: 10,
+    billingYear: 2026,
+    ...defaultCust,
+    subtotal: peaCalcOct.totalClaim95,
+    vatRate: 7,
+    vatAmount: peaCalcOct.vatAmount,
+    whtRate: 0,
+    whtAmount: 0,
+    grandTotal: peaCalcOct.grandTotal,
+    netPayable: peaCalcOct.netPayable,
+    enableVat: true,
+    enableWht: false,
     status: "PENDING",
     paymentDate: null,
     paymentMethod: null,
     paymentRef: null,
-    notes: "รอวางบิลรอบสิ้นเดือน",
-    thaiBahtText: ThaiBahtText(totSepRent.netPayable),
-    createdAt: "2026-09-01T09:00:00.000Z",
-    updatedAt: "2026-09-01T09:00:00.000Z",
-    items: itSepRent,
+    notes: "ออกเอกสารแล้ว รอพิมพ์จัดส่งไปรษณีย์ EMS ไปยัง กฟภ.",
+    thaiBahtText: ThaiBahtText(peaCalcOct.netPayable),
+    createdAt: "2026-10-14T08:00:00.000Z",
+    updatedAt: "2026-10-14T08:00:00.000Z",
+    items: itOctElec,
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
+    totalRawAmount: peaCalcOct.totalRawAmount,
+    peaFeeAmount: peaCalcOct.peaFeeAmount,
+    totalClaim95: peaCalcOct.totalClaim95,
+    payoutStatus: "WAITING_SEND",
+    payoutType: "REGULAR",
+    trackingNumber: "",
+    shippingDate: null,
+    peaReceivedDate: null,
+    estimatedPayoutDate: null,
   }
 
-  // 10. October Rent Invoice (PENDING)
+  // 6. October Rent Invoice
   const itOctRent = [
     {
       id: "it-oct-rent-1",
@@ -502,72 +517,29 @@ function initMockDocuments(): MockDocument[] {
     paymentDate: null,
     paymentMethod: null,
     paymentRef: null,
-    notes: "ออกใบแจ้งหนี้รอบต้นเดือน ตุลาคม",
+    notes: "ออกใบแจ้งหนี้ค่าเช่าพื้นที่รอบเดือนตุลาคม",
     thaiBahtText: ThaiBahtText(totOctRent.netPayable),
     createdAt: "2026-10-01T09:00:00.000Z",
     updatedAt: "2026-10-01T09:00:00.000Z",
     items: itOctRent,
-  }
-
-  // 11. October Electricity Invoice (PENDING)
-  const itOctElec = [
-    {
-      id: "it-oct-elec-1",
-      documentId: "doc-inv-oct-elec",
-      itemOrder: 1,
-      description: "ค่าส่วนต่างกระแสไฟฟ้า สถานีชาร์จ กรีนชาร์จ คลองหลวง ประจำเดือน ตุลาคม 2569 (ยอดประมาณการครึ่งเดือนแรก)",
-      quantity: 4200,
-      unitName: "kWh",
-      unitPrice: 2.0,
-      amount: 8400.0,
-      meterPrevious: 146300.0,
-      meterCurrent: 150500.0,
-    },
-  ]
-  const totOctElec = calculateAllTotals(itOctElec, true, 7, true, 3)
-  const docOctElec: MockDocument = {
-    id: "doc-inv-oct-elec",
-    docNumber: "INV-EV-202610-001",
-    docType: "INV_ELEC",
-    refInvoiceId: null,
-    issueDate: "2026-10-14T00:00:00.000Z",
-    dueDate: "2026-10-28T00:00:00.000Z",
-    billingMonth: 10,
-    billingYear: 2026,
-    ...defaultCust,
-    ...totOctElec,
-    enableVat: true,
-    enableWht: true,
-    status: "PENDING",
-    paymentDate: null,
-    paymentMethod: null,
-    paymentRef: null,
-    notes: "บิลรอบปัจจุบัน รอดำเนินการ",
-    thaiBahtText: ThaiBahtText(totOctElec.netPayable),
-    createdAt: "2026-10-14T08:00:00.000Z",
-    updatedAt: "2026-10-14T08:00:00.000Z",
-    items: itOctElec,
+    isVatRegistered: true,
+    branchNumber: "สำนักงานใหญ่",
   }
 
   return [
     docOctElec,
     docOctRent,
     docSepElec,
-    docSepRent,
-    recAugElec,
+    recSepElec,
     docAugElec,
-    docAugRent,
-    recJulRent,
-    docJulRent,
-    recJulElec,
-    docJulElec,
+    recAugElec,
   ]
 }
 
-// Global in-memory cache across requests
 const globalForStore = globalThis as unknown as {
   mockDocuments: MockDocument[] | undefined
   mockSettings: MockSettings | undefined
+  mockMonthlyFees: PeaMonthlyFee[] | undefined
 }
 
 export function getStore() {
@@ -577,9 +549,13 @@ export function getStore() {
   if (!globalForStore.mockSettings) {
     globalForStore.mockSettings = { ...mockSettings }
   }
+  if (!globalForStore.mockMonthlyFees) {
+    globalForStore.mockMonthlyFees = [...mockMonthlyFees]
+  }
   return {
     documents: globalForStore.mockDocuments,
     settings: globalForStore.mockSettings,
+    monthlyFees: globalForStore.mockMonthlyFees,
   }
 }
 
@@ -630,11 +606,11 @@ export function getMockDocuments(filters?: {
         d.customerName.toLowerCase().includes(q) ||
         d.stationName.toLowerCase().includes(q) ||
         d.notes.toLowerCase().includes(q) ||
-        d.contractRef.toLowerCase().includes(q)
+        d.contractRef.toLowerCase().includes(q) ||
+        (d.trackingNumber && d.trackingNumber.toLowerCase().includes(q))
     )
   }
 
-  // Populate refInvoice if present
   return list.map(doc => {
     if (doc.refInvoiceId) {
       const parent = store.documents.find(d => d.id === doc.refInvoiceId)
@@ -691,20 +667,21 @@ export function createMockDocument(data: any): MockDocument {
     documentId: id,
     itemOrder: it.itemOrder || idx + 1,
     description: it.description || "",
-    quantity: Number(it.quantity) || 0,
-    unitName: it.unitName || "",
+    quantity: Number(it.quantity) || 1,
+    unitName: it.unitName || (docType.includes("ELEC") ? "Unit" : "เดือน"),
     unitPrice: Number(it.unitPrice) || 0,
-    amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+    amount: (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
     meterPrevious: it.meterPrevious != null ? Number(it.meterPrevious) : null,
     meterCurrent: it.meterCurrent != null ? Number(it.meterCurrent) : null,
   }))
 
+  const isVat = data.isVatRegistered !== undefined ? data.isVatRegistered : store.settings.isVatRegistered
   const totals = calculateAllTotals(
     items,
-    data.enableVat !== false,
+    isVat && data.enableVat !== false,
     Number(data.vatRate) || 7,
-    data.enableWht !== false,
-    Number(data.whtRate) || getDefaultWhtRate(docType)
+    data.enableWht === true,
+    Number(data.whtRate) || 0
   )
 
   const newDoc: MockDocument = {
@@ -717,14 +694,14 @@ export function createMockDocument(data: any): MockDocument {
     billingMonth: month,
     billingYear: year,
     stationName: data.stationName || store.settings.companyName,
-    customerName: data.customerName || store.settings.defaultCustomerName,
-    customerAddress: data.customerAddress || store.settings.defaultCustomerAddress,
-    customerTaxId: data.customerTaxId || store.settings.defaultCustomerTaxId,
-    customerBranch: data.customerBranch || store.settings.defaultCustomerBranch,
+    customerName: data.customerName || PEA_HEADQUARTERS.name,
+    customerAddress: data.customerAddress || PEA_HEADQUARTERS.address,
+    customerTaxId: data.customerTaxId || PEA_HEADQUARTERS.taxId,
+    customerBranch: data.customerBranch || PEA_HEADQUARTERS.branch,
     contractRef: data.contractRef || "",
     ...totals,
-    enableVat: data.enableVat !== false,
-    enableWht: data.enableWht !== false,
+    enableVat: isVat && data.enableVat !== false,
+    enableWht: data.enableWht === true,
     status: data.status || "PENDING",
     paymentDate: data.paymentDate ? new Date(data.paymentDate).toISOString() : null,
     paymentMethod: data.paymentMethod || null,
@@ -734,10 +711,58 @@ export function createMockDocument(data: any): MockDocument {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     items,
+    isVatRegistered: isVat,
+    branchNumber: data.branchNumber || store.settings.branchNumber,
+    totalRawAmount: data.totalRawAmount || null,
+    peaFeeAmount: data.peaFeeAmount || null,
+    totalClaim95: data.totalClaim95 || null,
+    payoutStatus: data.payoutStatus || "WAITING_SEND",
+    payoutType: data.payoutType || "REGULAR",
+    trackingNumber: data.trackingNumber || null,
+    shippingDate: data.shippingDate ? new Date(data.shippingDate).toISOString() : null,
+    peaReceivedDate: data.peaReceivedDate ? new Date(data.peaReceivedDate).toISOString() : null,
+    estimatedPayoutDate: data.estimatedPayoutDate || null,
   }
 
   store.documents.unshift(newDoc)
   return newDoc
+}
+
+/**
+ * Generate paired PEA Invoice + Receipt simultaneously
+ */
+export function createMockPairedDocuments(data: any): { invoice: MockDocument; receipt: MockDocument } {
+  // 1. Create Invoice
+  const invoiceData = {
+    ...data,
+    docType: data.docType.includes("RENT") ? "INV_RENT" : "INV_ELEC",
+    status: "PENDING",
+  }
+  const invoice = createMockDocument(invoiceData)
+
+  // 2. Create Paired Receipt with receipt date = invoice date + 1 day or specified receiptDate
+  const invDate = new Date(invoice.issueDate)
+  let recDate = new Date(invDate.getTime() + 86400000) // Next day
+  if (data.receiptDate) {
+    const specified = new Date(data.receiptDate)
+    if (specified >= invDate) {
+      recDate = specified
+    }
+  }
+
+  const receiptData = {
+    ...data,
+    docType: data.docType.includes("RENT") ? "REC_RENT" : "REC_ELEC",
+    refInvoiceId: invoice.id,
+    issueDate: recDate.toISOString(),
+    dueDate: null,
+    status: "PENDING",
+    paymentMethod: "TRANSFER",
+    notes: `ออกคู่กับใบแจ้งหนี้ ${invoice.docNumber} เพื่อนำส่ง กฟภ.`,
+  }
+  const receipt = createMockDocument(receiptData)
+
+  return { invoice, receipt }
 }
 
 export function updateMockDocument(id: string, data: any): MockDocument | null {
@@ -748,26 +773,35 @@ export function updateMockDocument(id: string, data: any): MockDocument | null {
   const existing = store.documents[idx]
   const docType = data.docType || existing.docType
 
-  const items: MockItem[] = (data.items || []).map((it: any, i: number) => ({
+  const items: MockItem[] = (data.items || existing.items || []).map((it: any, i: number) => ({
     id: it.id || `it-${Date.now()}-${i}`,
     documentId: id,
     itemOrder: it.itemOrder || i + 1,
     description: it.description || "",
-    quantity: Number(it.quantity) || 0,
-    unitName: it.unitName || "",
+    quantity: Number(it.quantity) || 1,
+    unitName: it.unitName || (docType.includes("ELEC") ? "Unit" : "เดือน"),
     unitPrice: Number(it.unitPrice) || 0,
-    amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+    amount: (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
     meterPrevious: it.meterPrevious != null ? Number(it.meterPrevious) : null,
     meterCurrent: it.meterCurrent != null ? Number(it.meterCurrent) : null,
   }))
 
+  const isVat = data.isVatRegistered !== undefined ? data.isVatRegistered : existing.isVatRegistered
   const totals = calculateAllTotals(
     items,
-    data.enableVat !== false,
+    isVat && data.enableVat !== false,
     Number(data.vatRate) || 7,
-    data.enableWht !== false,
-    Number(data.whtRate) || getDefaultWhtRate(docType)
+    data.enableWht === true,
+    Number(data.whtRate) || 0
   )
+
+  const payoutType = data.payoutType || existing.payoutType || "REGULAR"
+  const peaReceivedDate = data.peaReceivedDate !== undefined ? data.peaReceivedDate : existing.peaReceivedDate
+  let estimatedPayoutDate = data.estimatedPayoutDate || existing.estimatedPayoutDate
+  if (peaReceivedDate) {
+    const days = payoutType === "FIRST_TIME" ? 45 : 30
+    estimatedPayoutDate = addBusinessDays(peaReceivedDate, days).toISOString()
+  }
 
   const updated: MockDocument = {
     ...existing,
@@ -777,6 +811,8 @@ export function updateMockDocument(id: string, data: any): MockDocument | null {
     thaiBahtText: ThaiBahtText(totals.netPayable),
     updatedAt: new Date().toISOString(),
     items,
+    isVatRegistered: isVat,
+    estimatedPayoutDate,
   }
 
   store.documents[idx] = updated
@@ -795,11 +831,20 @@ export function convertMockInvoiceToReceipt(id: string, data: any): MockDocument
   const invoice = store.documents.find(d => d.id === id)
   if (!invoice) return null
 
-  // Mark invoice as PAID
+  // Ensure receipt date is >= invoice date
+  const invDate = new Date(invoice.issueDate)
+  let recDate = new Date()
+  if (data.paymentDate) {
+    const pDate = new Date(data.paymentDate)
+    if (pDate >= invDate) recDate = pDate
+    else recDate = new Date(invDate.getTime() + 86400000)
+  } else if (recDate < invDate) {
+    recDate = new Date(invDate.getTime() + 86400000)
+  }
+
   invoice.status = "PAID"
   invoice.updatedAt = new Date().toISOString()
 
-  // Target receipt type
   const targetType = invoice.docType === "INV_ELEC" ? "REC_ELEC" : "REC_RENT"
   const recDocNumber = generateMockDocNumber(targetType, invoice.billingMonth, invoice.billingYear)
 
@@ -817,9 +862,9 @@ export function convertMockInvoiceToReceipt(id: string, data: any): MockDocument
     docType: targetType,
     refInvoiceId: invoice.id,
     status: "PAID",
-    issueDate: data.paymentDate ? new Date(data.paymentDate).toISOString() : new Date().toISOString(),
+    issueDate: recDate.toISOString(),
     dueDate: null,
-    paymentDate: data.paymentDate ? new Date(data.paymentDate).toISOString() : new Date().toISOString(),
+    paymentDate: recDate.toISOString(),
     paymentMethod: data.paymentMethod || "TRANSFER",
     paymentRef: data.paymentRef || `AUTO-${Date.now()}`,
     notes: data.notes || `ออกใบเสร็จรับเงินอ้างอิงใบแจ้งหนี้เลขที่ ${invoice.docNumber}`,
@@ -858,7 +903,7 @@ export function duplicateMockDocument(id: string): MockDocument | null {
     billingMonth: currentMonth,
     billingYear: currentYear,
     issueDate: now.toISOString(),
-    dueDate: source.dueDate ? new Date(now.getTime() + 15 * 86400000).toISOString() : null,
+    dueDate: source.dueDate ? new Date(now.getTime() + 30 * 86400000).toISOString() : null,
     paymentDate: null,
     paymentMethod: null,
     paymentRef: null,
@@ -866,6 +911,11 @@ export function duplicateMockDocument(id: string): MockDocument | null {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     items,
+    payoutStatus: "WAITING_SEND",
+    trackingNumber: null,
+    shippingDate: null,
+    peaReceivedDate: null,
+    estimatedPayoutDate: null,
   }
 
   store.documents.unshift(duplicated)
@@ -876,7 +926,6 @@ export function getMockDashboardStats() {
   const store = getStore()
   const docs = store.documents
 
-  // Avoid double counting receipts that reference invoices
   const paidElec = docs.filter(
     d => d.status === "PAID" && (d.docType === "INV_ELEC" || d.docType === "REC_ELEC") && !d.refInvoiceId
   )
@@ -892,6 +941,10 @@ export function getMockDashboardStats() {
   const cancelledInvoices = docs.filter(d => d.status === "CANCELLED").length
   const totalDocuments = docs.length
 
+  const waitingSendCount = docs.filter(d => d.payoutStatus === "WAITING_SEND").length
+  const sentCount = docs.filter(d => d.payoutStatus === "SENT").length
+  const peaReceivedCount = docs.filter(d => d.payoutStatus === "PEA_RECEIVED").length
+
   const recentDocuments = docs.slice(0, 5)
 
   return {
@@ -901,12 +954,48 @@ export function getMockDashboardStats() {
     paidInvoices,
     cancelledInvoices,
     totalDocuments,
+    waitingSendCount,
+    sentCount,
+    peaReceivedCount,
     recentDocuments,
   }
+}
+
+// Monthly Fee Tracker
+export function getMockMonthlyFees(): PeaMonthlyFee[] {
+  return getStore().monthlyFees
+}
+
+export function createMockMonthlyFee(data: any): PeaMonthlyFee {
+  const store = getStore()
+  const fee: PeaMonthlyFee = {
+    id: `fee-${Date.now()}`,
+    billingMonth: parseInt(data.billingMonth, 10),
+    billingYear: parseInt(data.billingYear, 10),
+    stationName: data.stationName || store.settings.companyName,
+    ref1Contract: data.ref1Contract || "",
+    ref2Invoice: data.ref2Invoice || "",
+    amount: Number(data.amount) || 0,
+    paymentDate: data.paymentDate ? new Date(data.paymentDate).toISOString() : new Date().toISOString(),
+    paymentChannel: data.paymentChannel || "PEA_SMART_PLUS",
+    status: data.status || "PAID",
+    notes: data.notes || "",
+    createdAt: new Date().toISOString(),
+  }
+  store.monthlyFees.unshift(fee)
+  return fee
+}
+
+export function deleteMockMonthlyFee(id: string): boolean {
+  const store = getStore()
+  const before = store.monthlyFees.length
+  store.monthlyFees = store.monthlyFees.filter(f => f.id !== id)
+  return store.monthlyFees.length < before
 }
 
 export function resetMockData() {
   globalForStore.mockDocuments = initMockDocuments()
   globalForStore.mockSettings = { ...mockSettings }
+  globalForStore.mockMonthlyFees = [...mockMonthlyFees]
   return { success: true, count: globalForStore.mockDocuments.length }
 }

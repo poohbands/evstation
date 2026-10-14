@@ -15,6 +15,10 @@ import {
   Database,
   RefreshCw,
   Loader2,
+  Truck,
+  Mail,
+  CreditCard,
+  Building2,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -41,6 +45,7 @@ import {
   formatShortDate,
   DOC_TYPE_LABELS,
   STATUS_LABELS,
+  PAYOUT_STATUS_LABELS,
 } from "@/lib/utils"
 import type { DashboardStats, DocumentWithItems } from "@/types"
 
@@ -57,6 +62,9 @@ export default function DashboardPage() {
     paidInvoices: 0,
     cancelledInvoices: 0,
     totalDocuments: 0,
+    waitingSendCount: 0,
+    sentCount: 0,
+    peaReceivedCount: 0,
   })
   const [recentDocs, setRecentDocs] = React.useState<DocumentWithItems[]>([])
 
@@ -68,9 +76,18 @@ export default function DashboardPage() {
         throw new Error("ไม่สามารถโหลดข้อมูลแดชบอร์ดได้")
       }
       const data = await res.json()
-      if (data.stats) {
-        setStats(data.stats)
-      }
+      const statsData = data.stats || data
+      setStats({
+        totalElectricityRevenue: statsData.totalElectricityRevenue || 0,
+        totalRentalRevenue: statsData.totalRentalRevenue || 0,
+        pendingInvoices: statsData.pendingInvoices || 0,
+        paidInvoices: statsData.paidInvoices || 0,
+        cancelledInvoices: statsData.cancelledInvoices || 0,
+        totalDocuments: statsData.totalDocuments || 0,
+        waitingSendCount: statsData.waitingSendCount || 0,
+        sentCount: statsData.sentCount || 0,
+        peaReceivedCount: statsData.peaReceivedCount || 0,
+      })
       if (data.recentDocuments) {
         setRecentDocs(data.recentDocuments)
       }
@@ -166,6 +183,103 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        {/* PEA VOLTA Payout & SLA Tracking Banner */}
+        <Card className="border-purple-200 bg-gradient-to-r from-purple-50 via-indigo-50/40 to-blue-50/40 shadow-sm overflow-hidden">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600 text-white shadow-xs">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    ติดตามขั้นตอนการเบิกเงิน กฟภ. (PEA VOLTA Claim Workflow)
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    กระบวนการนำส่งเอกสารตัวจริงทางไปรษณีย์ และระยะเวลาตาม SLA
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Link href="/envelope">
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs text-purple-700 border-purple-300 hover:bg-purple-100/50">
+                    <Mail className="h-3.5 w-3.5" />
+                    พิมพ์ใบปะหน้าซอง
+                  </Button>
+                </Link>
+                <Link href="/monthly-fees">
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs text-indigo-700 border-indigo-300 hover:bg-indigo-100/50">
+                    <CreditCard className="h-3.5 w-3.5" />
+                    ค่าบริการ PEA App
+                  </Button>
+                </Link>
+                <Link href="/documents">
+                  <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs text-slate-600 hover:text-purple-700">
+                    ดูเอกสารทั้งหมด
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Step 1: Waiting Submit */}
+              <Link href="/documents?status=PENDING" className="block">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100/60 transition cursor-pointer">
+                  <div>
+                    <span className="text-xs font-semibold text-amber-800 block">1. รอส่งเอกสารตัวจริง</span>
+                    <span className="text-[11px] text-amber-700">พิมพ์เอกสารและใบปะหน้า</span>
+                  </div>
+                  <span className="text-2xl font-bold text-amber-700 font-mono">
+                    {stats.waitingSendCount ?? 0}
+                  </span>
+                </div>
+              </Link>
+
+              {/* Step 2: Sent */}
+              <Link href="/documents" className="block">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-blue-200 bg-blue-50/70 hover:bg-blue-100/60 transition cursor-pointer">
+                  <div>
+                    <span className="text-xs font-semibold text-blue-800 block">2. ส่งไปรษณีย์แล้ว</span>
+                    <span className="text-[11px] text-blue-700">อยู่ระหว่างนำจ่าย EMS</span>
+                  </div>
+                  <span className="text-2xl font-bold text-blue-700 font-mono">
+                    {stats.sentCount ?? 0}
+                  </span>
+                </div>
+              </Link>
+
+              {/* Step 3: PEA Received */}
+              <Link href="/documents" className="block">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-purple-200 bg-purple-50/70 hover:bg-purple-100/60 transition cursor-pointer">
+                  <div>
+                    <span className="text-xs font-semibold text-purple-800 block">3. กฟภ. ลงรับแล้ว</span>
+                    <span className="text-[11px] text-purple-700">กำลังนับ SLA 30/45 วัน</span>
+                  </div>
+                  <span className="text-2xl font-bold text-purple-700 font-mono">
+                    {stats.peaReceivedCount ?? 0}
+                  </span>
+                </div>
+              </Link>
+
+              {/* Step 4: Paid */}
+              <Link href="/documents?status=PAID" className="block">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/60 transition cursor-pointer">
+                  <div>
+                    <span className="text-xs font-semibold text-emerald-800 block">4. ชำระเงินเสร็จสิ้น</span>
+                    <span className="text-[11px] text-emerald-700">โอนเงินเข้าบัญชีแล้ว</span>
+                  </div>
+                  <span className="text-2xl font-bold text-emerald-700 font-mono">
+                    {stats.paidInvoices ?? 0}
+                  </span>
+                </div>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* 6 Summary Cards (2x3 on mobile/tablet, 3x2 on desktop) */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -469,7 +583,14 @@ export default function DashboardPage() {
                           ฿{formatCurrency(doc.netPayable)}
                         </TableCell>
                         <TableCell className="text-center">
-                          {getStatusBadge(doc.status)}
+                          <div className="flex flex-col items-center gap-1">
+                            {getStatusBadge(doc.status)}
+                            {doc.payoutStatus && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${PAYOUT_STATUS_LABELS[doc.payoutStatus]?.color || ""}`}>
+                                {PAYOUT_STATUS_LABELS[doc.payoutStatus]?.label || doc.payoutStatus}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-slate-500 text-xs">
                           {formatDate(doc.issueDate)}
