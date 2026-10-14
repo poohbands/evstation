@@ -15,6 +15,15 @@ const DEFAULT_USERS: StoredUser[] = [
     createdAt: new Date().toISOString(),
   },
   {
+    id: "user-nukai",
+    username: "nukai",
+    passwordHash: "nukai12345",
+    name: "Nukai (ผู้ดูแลระบบ)",
+    role: "ADMIN",
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
     id: "user-accountant",
     username: "accountant",
     passwordHash: "sakura4923",
@@ -41,6 +50,12 @@ const globalForAuth = globalThis as unknown as {
 export function getUsers(): StoredUser[] {
   if (!globalForAuth.storedUsers || globalForAuth.storedUsers.length === 0) {
     globalForAuth.storedUsers = [...DEFAULT_USERS]
+  } else {
+    for (const def of DEFAULT_USERS) {
+      if (!globalForAuth.storedUsers.some(u => u.username.toLowerCase() === def.username.toLowerCase())) {
+        globalForAuth.storedUsers.push(def)
+      }
+    }
   }
   return globalForAuth.storedUsers
 }
