@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server"
-import { runDatabaseSeed } from "@/lib/seed-data"
+import { seedDatabase } from "@/lib/data-service"
+
+export const dynamic = "force-dynamic"
 
 export async function POST() {
   try {
-    const result = await runDatabaseSeed()
+    const result = await seedDatabase()
     return NextResponse.json({
-      message: "ข้อมูลตัวอย่างถูกเพิ่มลงในฐานข้อมูลเรียบร้อยแล้ว",
-      ...result,
+      success: true,
+      message: "ระบบข้อมูลจำลองพร้อมใช้งานเรียบร้อยแล้ว",
+      data: result,
     })
   } catch (error: any) {
-    console.error("Error running database seed via API:", error)
+    console.error("Error seeding database:", error)
     return NextResponse.json(
-      { error: "เกิดข้อผิดพลาดในการโหลดข้อมูลตัวอย่าง", details: error.message },
+      { error: "เกิดข้อผิดพลาดในการสร้างข้อมูลจำลอง", details: error.message },
       { status: 500 }
     )
   }
