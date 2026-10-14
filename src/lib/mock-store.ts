@@ -661,7 +661,7 @@ export function generateMockDocNumber(docType: string, month: number, year: numb
 
 export function createMockDocument(data: any): MockDocument {
   const store = getStore()
-  const id = `doc-${Date.now()}`
+  const id = data.id || `doc-${Date.now()}`
   const month = parseInt(data.billingMonth || "10", 10)
   const year = parseInt(data.billingYear || "2026", 10)
   const docType = data.docType || "INV_ELEC"
@@ -730,7 +730,12 @@ export function createMockDocument(data: any): MockDocument {
     estimatedPayoutDate: data.estimatedPayoutDate || null,
   }
 
-  store.documents.unshift(newDoc)
+  const existingIdx = store.documents.findIndex(d => d.id === id)
+  if (existingIdx !== -1) {
+    store.documents[existingIdx] = newDoc
+  } else {
+    store.documents.unshift(newDoc)
+  }
   return newDoc
 }
 

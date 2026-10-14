@@ -62,6 +62,7 @@ import {
   calculatePeaVoltaRevenue,
   generatePeaVoltaDescription,
 } from "@/lib/calculations"
+import { saveLocalDocument } from "@/lib/client-storage"
 import type { DocType, DocumentItemInput, PaymentMethod } from "@/types"
 
 function CreateDocumentForm() {
@@ -352,6 +353,9 @@ function CreateDocumentForm() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "ไม่สามารถออกคู่เอกสารได้")
 
+        if (data.invoice) saveLocalDocument(data.invoice)
+        if (data.receipt) saveLocalDocument(data.receipt)
+
         toast({
           title: "ออกคู่เอกสาร กฟภ. สำเร็จเรียบร้อย",
           description: `สร้าง ${data.invoice.docNumber} และ ${data.receipt.docNumber} พร้อมพิมพ์`,
@@ -366,6 +370,8 @@ function CreateDocumentForm() {
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "ไม่สามารถสร้างเอกสารได้")
+
+        saveLocalDocument(data)
 
         toast({
           title: "สร้างเอกสารสำเร็จ",

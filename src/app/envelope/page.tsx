@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PEA_ENVELOPE_RECIPIENT, PEA_HEADQUARTERS, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
+import { getLocalDocument } from "@/lib/client-storage"
 import type { OrganizationSettingsData, DocumentWithItems } from "@/types"
 
 function EnvelopeCoverContent() {
@@ -56,10 +57,24 @@ function EnvelopeCoverContent() {
       fetch(`/api/documents/${docId}`)
         .then((r) => r.json())
         .then((d) => {
-          setDoc(d)
-          if (d.trackingNumber) setTrackingNumber(d.trackingNumber)
+          if (d && !d.error) {
+            setDoc(d)
+            if (d.trackingNumber) setTrackingNumber(d.trackingNumber)
+          } else {
+            const local = getLocalDocument(docId)
+            if (local) {
+              setDoc(local)
+              if (local.trackingNumber) setTrackingNumber(local.trackingNumber)
+            }
+          }
         })
-        .catch((e) => console.error(e))
+        .catch(() => {
+          const local = getLocalDocument(docId)
+          if (local) {
+            setDoc(local)
+            if (local.trackingNumber) setTrackingNumber(local.trackingNumber)
+          }
+        })
     }
   }, [docId])
 

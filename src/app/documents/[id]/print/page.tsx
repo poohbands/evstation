@@ -20,6 +20,7 @@ import {
   PEA_HEADQUARTERS,
 } from "@/lib/utils"
 import { ThaiBahtText } from "@/lib/thai-baht-text"
+import { getLocalDocument, saveLocalDocument } from "@/lib/client-storage"
 import type { DocumentWithItems, OrganizationSettingsData } from "@/types"
 
 export default function DocumentPrintPage() {
@@ -41,10 +42,34 @@ export default function DocumentPrintPage() {
           fetch(`/api/documents/${id}`),
           fetch(`/api/settings`),
         ])
-        if (docRes.ok) setDocument(await docRes.json())
+
+        let docData: DocumentWithItems | null = null
+
+        if (docRes.ok) {
+          docData = await docRes.json()
+          saveLocalDocument(docData)
+        } else {
+          // Fallback to client localStorage
+          const localDoc = getLocalDocument(id)
+          if (localDoc) {
+            docData = localDoc
+            // Background re-sync to server
+            fetch("/api/documents", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(localDoc),
+            }).catch(() => {})
+          }
+        }
+
+        setDocument(docData)
         if (setRes.ok) setSettings(await setRes.json())
       } catch (err) {
         console.error("Print page fetch error:", err)
+        const localDoc = getLocalDocument(id)
+        if (localDoc) {
+          setDocument(localDoc)
+        }
       } finally {
         setLoading(false)
       }

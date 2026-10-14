@@ -92,6 +92,7 @@ import {
   getRemainingBusinessDays,
   addBusinessDays,
 } from "@/lib/calculations"
+import { getLocalDocument, saveLocalDocument, removeLocalDocument } from "@/lib/client-storage"
 import type { DocType, DocumentItemInput, DocumentWithItems, PaymentMethod, PayoutStatus, PayoutType } from "@/types"
 
 function DocumentDetailContent() {
@@ -156,10 +157,27 @@ function DocumentDetailContent() {
     try {
       setLoading(true)
       const res = await fetch(`/api/documents/${id}`)
-      if (!res.ok) {
-        throw new Error("ไม่พบเอกสารหรือข้อมูลผิดพลาด")
+      let data: DocumentWithItems | null = null
+
+      if (res.ok) {
+        data = await res.json()
+        saveLocalDocument(data)
+      } else {
+        const localDoc = getLocalDocument(id)
+        if (localDoc) {
+          data = localDoc
+          fetch("/api/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(localDoc),
+          }).catch(() => {})
+        } else {
+          throw new Error("ไม่พบเอกสารหรือข้อมูลผิดพลาด")
+        }
       }
-      const data: DocumentWithItems = await res.json()
+
+      if (!data) return
+
       setDocument(data)
 
       // Populate tracking state
@@ -524,6 +542,7 @@ function DocumentDetailContent() {
       if (!res.ok) {
         throw new Error("ไม่สามารถลบเอกสารได้")
       }
+      removeLocalDocument(id)
       toast({
         title: "ลบเอกสารสำเร็จ",
         description: "นำเอกสารออกจากระบบเรียบร้อยแล้ว",

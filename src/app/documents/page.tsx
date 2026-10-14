@@ -70,6 +70,7 @@ import {
   STATUS_LABELS,
   THAI_MONTHS,
 } from "@/lib/utils"
+import { getLocalDocuments, removeLocalDocument } from "@/lib/client-storage"
 import type { DocumentWithItems } from "@/types"
 
 export default function DocumentsPage() {
@@ -108,14 +109,36 @@ export default function DocumentsPage() {
         throw new Error("ไม่สามารถโหลดรายการเอกสารได้")
       }
       const data = await res.json()
-      setDocuments(Array.isArray(data) ? data : [])
+      const serverDocs: DocumentWithItems[] = Array.isArray(data) ? data : []
+
+      // Merge client local documents (prevents disappearing on serverless cold starts)
+      const localDocs = getLocalDocuments()
+      const merged = [...serverDocs]
+      for (const ld of localDocs) {
+        if (!merged.some(d => d.id === ld.id)) {
+          merged.unshift(ld)
+          // Re-sync to server in background
+          fetch("/api/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ld),
+          }).catch(() => {})
+        }
+      }
+
+      setDocuments(merged)
     } catch (err: any) {
       console.error(err)
-      toast({
-        title: "เกิดข้อผิดพลาด",
-        description: err.message || "ไม่สามารถดึงข้อมูลเอกสารได้",
-        variant: "destructive",
-      })
+      const localDocs = getLocalDocuments()
+      if (localDocs.length > 0) {
+        setDocuments(localDocs)
+      } else {
+        toast({
+          title: "เกิดข้อผิดพลาด",
+          description: err.message || "ไม่สามารถดึงข้อมูลเอกสารได้",
+          variant: "destructive",
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -243,6 +266,7 @@ export default function DocumentsPage() {
       if (!res.ok) {
         throw new Error(data.error || "ไม่สามารถลบเอกสารได้")
       }
+      removeLocalDocument(deleteId)
       toast({
         title: "ลบเอกสารสำเร็จ",
         description: "นำเอกสารออกจากระบบเรียบร้อยแล้ว",
