@@ -17,6 +17,7 @@ import {
   Shield,
   User as UserIcon,
   ExternalLink,
+  Wrench,
 } from "lucide-react"
 import { cn, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useAuth } from "@/components/auth/AuthContext"
@@ -56,6 +57,11 @@ const navItems = [
     title: "บันทึกค่าบริการ PEA App",
     href: "/monthly-fees",
     icon: CreditCard,
+  },
+  {
+    title: "โหมดปรับปรุง (Maintenance)",
+    href: "/maintenance",
+    icon: Wrench,
   },
   {
     title: "ตั้งค่าองค์กร & สิทธิ์ผู้ใช้",

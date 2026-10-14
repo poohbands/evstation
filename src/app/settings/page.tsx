@@ -6,6 +6,7 @@ import {
   Save,
   CreditCard,
   UserCheck,
+  UserX,
   RefreshCw,
   Building,
   CheckCircle2,
@@ -22,7 +23,10 @@ import {
   Key,
   Eye,
   EyeOff,
+  Wrench,
+  ExternalLink,
 } from "lucide-react"
+import Link from "next/link"
 import { AppShell } from "@/components/layout/AppShell"
 import {
   Card,
@@ -75,6 +79,7 @@ export default function SettingsPage() {
   const [editRole, setEditRole] = React.useState<UserRole>("VIEWER")
   const [editPassword, setEditPassword] = React.useState("")
   const [showEditPassword, setShowEditPassword] = React.useState(false)
+  const [editIsActive, setEditIsActive] = React.useState(true)
   const [updatingUser, setUpdatingUser] = React.useState(false)
 
   // Delete User Confirmation Modal state
@@ -103,6 +108,9 @@ export default function SettingsPage() {
     defaultCustomerAddress: PEA_HEADQUARTERS.address,
     defaultCustomerTaxId: PEA_HEADQUARTERS.taxId,
     defaultCustomerBranch: PEA_HEADQUARTERS.branch,
+    isMaintenanceMode: false,
+    maintenanceMessage: "ระบบกำลังปิดปรับปรุงชั่วคราวเพื่ออัปเกรดระบบ กรุณาลองใหม่อีกครั้งในภายหลัง",
+    maintenanceUntil: "",
   })
 
   const fetchSettings = React.useCallback(async () => {
@@ -132,6 +140,9 @@ export default function SettingsPage() {
         defaultCustomerAddress: data.defaultCustomerAddress || PEA_HEADQUARTERS.address,
         defaultCustomerTaxId: data.defaultCustomerTaxId || PEA_HEADQUARTERS.taxId,
         defaultCustomerBranch: data.defaultCustomerBranch || PEA_HEADQUARTERS.branch,
+        isMaintenanceMode: Boolean(data.isMaintenanceMode),
+        maintenanceMessage: data.maintenanceMessage || "ระบบกำลังปิดปรับปรุงชั่วคราวเพื่ออัปเกรดระบบ กรุณาลองใหม่อีกครั้งในภายหลัง",
+        maintenanceUntil: data.maintenanceUntil || "",
       })
     } catch (err: any) {
       toast({
@@ -184,6 +195,7 @@ export default function SettingsPage() {
         body: JSON.stringify(formData),
       })
       if (!res.ok) throw new Error("ไม่สามารถบันทึกข้อมูลได้")
+      window.dispatchEvent(new Event("maintenance-changed"))
       toast({
         title: "บันทึกข้อมูลสำเร็จ",
         description: "ข้อมูลองค์กรและค่าเริ่มต้น กฟภ. ถูกอัปเดตเรียบร้อยแล้ว",
@@ -196,6 +208,33 @@ export default function SettingsPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleToggleUserActive = async (u: User, newActiveState: boolean) => {
+    try {
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: u.id,
+          isActive: newActiveState,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "ไม่สามารถเปลี่ยนสถานะผู้ใช้ได้")
+
+      toast({
+        title: newActiveState ? "เปิดใช้งานผู้ใช้สำเร็จ" : "ปิดใช้งานผู้ใช้สำเร็จ",
+        description: `ผู้ใช้ ${u.username} ${newActiveState ? "เปิดใช้งานแล้ว" : "ถูกปิดใช้งานแล้ว"}`,
+      })
+      fetchUsers()
+    } catch (err: any) {
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: err.message,
+        variant: "destructive",
+      })
     }
   }
 
@@ -243,6 +282,7 @@ export default function SettingsPage() {
     setEditName(u.name)
     setEditRole(u.role)
     setEditPassword("")
+    setEditIsActive(u.isActive !== false)
     setEditUserModalOpen(true)
   }
 
@@ -260,6 +300,7 @@ export default function SettingsPage() {
           username: editUsername.trim(),
           name: editName.trim(),
           role: editRole,
+          isActive: editIsActive,
           password: editPassword.trim() || undefined,
         }),
       })
@@ -694,6 +735,90 @@ export default function SettingsPage() {
           </form>
         )}
 
+        {/* Maintenance Mode Card with direct link to /maintenance */}
+        <Card className="border-amber-200 bg-gradient-to-r from-amber-50/70 via-orange-50/30 to-amber-50/50 shadow-sm mt-8">
+          <CardHeader className="border-b border-amber-200/60 bg-amber-100/40">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-500 text-white rounded-lg shadow-sm">
+                  <Wrench className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base text-slate-900 flex items-center gap-2">
+                    โหมดปิดปรับปรุงระบบ (Maintenance Mode)
+                    {formData.isMaintenanceMode ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 border border-red-200">
+                        กำลังเปิดใช้งาน (ON)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        ปิดอยู่ (ระบบเปิดปกติ)
+                      </span>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-600">
+                    เมื่อเปิดโหมดนี้ ผู้ใช้ทั่วไปและผู้เยี่ยมชมจะไม่สามารถเข้าถึงหน้าเว็บได้ ยกเว้นผู้ดูแลระบบ (ADMIN)
+                  </CardDescription>
+                </div>
+              </div>
+              <Link href="/maintenance">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-300 text-amber-900 hover:bg-amber-100 bg-white gap-1.5 text-xs font-medium shadow-sm"
+                >
+                  <Wrench className="h-3.5 w-3.5 text-amber-600" />
+                  จัดการโหมดปรับปรุงเต็มรูปแบบ
+                  <ExternalLink className="h-3 w-3 opacity-60" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-3.5 rounded-lg border border-amber-200/80 bg-white shadow-sm">
+              <div className="space-y-0.5">
+                <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  สวิตช์เปิด/ปิด โหมดปิดปรับปรุง
+                </div>
+                <p className="text-xs text-slate-500">
+                  {formData.isMaintenanceMode
+                    ? "ขณะนี้ระบบถูกปิดปรับปรุง: แสดงหน้าจอแจ้งเตือนแก่ผู้ใช้ทั่วไป และแสดงแถบเตือนสีส้มแก่ Admin"
+                    : "ขณะนี้ระบบเปิดให้บริการตามปกติ: ผู้ใช้งานทุกคนสามารถเข้าสู่ระบบและสร้างเอกสารได้"}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={Boolean(formData.isMaintenanceMode)}
+                  onCheckedChange={async (checked) => {
+                    handleChange("isMaintenanceMode", checked)
+                    try {
+                      const res = await fetch("/api/settings", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ...formData, isMaintenanceMode: checked }),
+                      })
+                      if (!res.ok) throw new Error("ไม่สามารถเปลี่ยนสถานะได้")
+                      window.dispatchEvent(new Event("maintenance-changed"))
+                      toast({
+                        title: checked ? "เปิดโหมดปิดปรับปรุงแล้ว" : "ปิดโหมดปรับปรุงแล้ว (ระบบเปิดปกติ)",
+                        description: checked
+                          ? "ผู้ใช้ทั่วไปจะเห็นหน้าจอแจ้งปิดปรับปรุงชั่วคราว"
+                          : "ระบบเปิดให้บริการผู้ใช้ทุกคนตามปกติแล้ว",
+                      })
+                    } catch (err: any) {
+                      toast({ title: "เกิดข้อผิดพลาด", description: err.message, variant: "destructive" })
+                    }
+                  }}
+                />
+                <span className={`text-xs font-bold ${formData.isMaintenanceMode ? "text-amber-700" : "text-slate-400"}`}>
+                  {formData.isMaintenanceMode ? "เปิดอยู่" : "ปิดอยู่"}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Section 4: การจัดการผู้ใช้งานระบบและสิทธิ์การใช้งาน (User Management) */}
         <Card className="border-slate-200 shadow-sm mt-8">
           <CardHeader className="bg-slate-50/70 border-b border-slate-100">
@@ -802,6 +927,7 @@ export default function SettingsPage() {
                     <th className="py-2.5 px-3">ชื่อผู้ใช้ (Username)</th>
                     <th className="py-2.5 px-3">ชื่อ-นามสกุล</th>
                     <th className="py-2.5 px-3">สิทธิ์การใช้งาน (Role)</th>
+                    <th className="py-2.5 px-3">สถานะ (เปิด/ปิด)</th>
                     <th className="py-2.5 px-3 text-right">จัดการ</th>
                   </tr>
                 </thead>
@@ -830,6 +956,27 @@ export default function SettingsPage() {
                           <Shield className="h-3 w-3" />
                           {u.role}
                         </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={u.isActive !== false}
+                            onCheckedChange={(checked) => handleToggleUserActive(u, checked)}
+                            disabled={currentUser?.id === u.id && u.role === "ADMIN"}
+                            title={currentUser?.id === u.id && u.role === "ADMIN" ? "ไม่สามารถปิดบัญชีแอดมินของตนเองได้" : "เปิด/ปิด การใช้งานบัญชี"}
+                          />
+                          {u.isActive !== false ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              เปิดใช้งาน
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              ปิดใช้งาน
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -915,6 +1062,20 @@ export default function SettingsPage() {
                     <SelectItem value="VIEWER">ผู้ตรวจสอบ (VIEWER) - ดูและพิมพ์รายงานเท่านั้น</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-xs font-semibold text-slate-800">สถานะการใช้งานบัญชี (Account Status)</Label>
+                  <p className="text-[11px] text-slate-500">
+                    {editIsActive ? "เปิดใช้งาน: สามารถเข้าสู่ระบบได้ตามปกติ" : "ปิดใช้งาน: ระงับการเข้าสู่ระบบชั่วคราว"}
+                  </p>
+                </div>
+                <Switch
+                  checked={editIsActive}
+                  onCheckedChange={setEditIsActive}
+                  disabled={currentUser?.id === editingUserId && editRole === "ADMIN"}
+                />
               </div>
 
               <div>

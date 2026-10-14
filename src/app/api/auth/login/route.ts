@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { validateCredentials } from "@/lib/auth"
+import { getOrganizationSettings } from "@/lib/data-service"
 
 export const dynamic = "force-dynamic"
 
@@ -14,11 +15,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const user = validateCredentials(username, password)
-    if (!user) {
+    const result = validateCredentials(username, password)
+    if (!result.user) {
       return NextResponse.json(
-        { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" },
-        { status: 401 }
+        { error: result.error || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" },
+        { status: result.error?.includes("ปิดการใช้งาน") ? 403 : 401 }
+      )
+    }
+
+    const user = result.user
+
+    // Check Maintenance Mode
+    const settings = (await getOrganizationSettings()) as any
+    if (settings?.isMaintenanceMode && user.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error: "ระบบอยู่ระหว่างปิดปรับปรุงชั่วคราว (Maintenance Mode) อนุญาตเฉพาะผู้ดูแลระบบ (ADMIN) เข้าสู่ระบบเท่านั้น",
+        },
+        { status: 503 }
       )
     }
 

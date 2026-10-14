@@ -11,6 +11,7 @@ const DEFAULT_USERS: StoredUser[] = [
     passwordHash: "sakura4923",
     name: "ผู้ดูแลระบบ (Admin)",
     role: "ADMIN",
+    isActive: true,
     createdAt: new Date().toISOString(),
   },
   {
@@ -19,6 +20,7 @@ const DEFAULT_USERS: StoredUser[] = [
     passwordHash: "sakura4923",
     name: "เจ้าหน้าที่การเงินและบัญชี",
     role: "ACCOUNTANT",
+    isActive: true,
     createdAt: new Date().toISOString(),
   },
   {
@@ -27,6 +29,7 @@ const DEFAULT_USERS: StoredUser[] = [
     passwordHash: "sakura4923",
     name: "ผู้ตรวจสอบข้อมูล (Viewer)",
     role: "VIEWER",
+    isActive: true,
     createdAt: new Date().toISOString(),
   },
 ]
@@ -47,13 +50,17 @@ export function findUserByUsername(username: string): StoredUser | null {
   return users.find(u => u.username.toLowerCase() === username.toLowerCase().trim()) || null
 }
 
-export function validateCredentials(username: string, password: string): User | null {
+export function validateCredentials(username: string, password: string): { user: User | null; error?: string } {
   const user = findUserByUsername(username)
-  if (!user) return null
-  if (user.passwordHash !== password) return null
+  if (!user) return { user: null, error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" }
+  if (user.passwordHash !== password) return { user: null, error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" }
+
+  if (user.isActive === false) {
+    return { user: null, error: "บัญชีผู้ใช้นี้ถูกปิดการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }
+  }
 
   const { passwordHash, ...safeUser } = user
-  return safeUser
+  return { user: { ...safeUser, isActive: safeUser.isActive !== false } }
 }
 
 export function createUser(data: {
@@ -61,6 +68,7 @@ export function createUser(data: {
   password: string
   name: string
   role: UserRole
+  isActive?: boolean
 }): { success: boolean; user?: User; error?: string } {
   const users = getUsers()
   const existing = findUserByUsername(data.username)
@@ -74,6 +82,7 @@ export function createUser(data: {
     passwordHash: data.password,
     name: data.name.trim(),
     role: data.role,
+    isActive: data.isActive !== undefined ? data.isActive : true,
     createdAt: new Date().toISOString(),
   }
 
@@ -91,6 +100,7 @@ export function updateUser(
     password?: string
     name?: string
     role?: UserRole
+    isActive?: boolean
   }
 ): { success: boolean; user?: User; error?: string } {
   const users = getUsers()
@@ -122,6 +132,16 @@ export function updateUser(
 
   if (data.password && data.password.trim() !== "") {
     existing.passwordHash = data.password.trim()
+  }
+
+  if (data.isActive !== undefined) {
+    if (data.isActive === false && existing.role === "ADMIN") {
+      const activeAdmins = users.filter(u => u.role === "ADMIN" && u.isActive !== false)
+      if (activeAdmins.length <= 1 && existing.isActive !== false) {
+        return { success: false, error: "ไม่สามารถปิดใช้งานผู้ดูแลระบบคนสุดท้ายได้ ต้องมี Admin ที่เปิดใช้งานอย่างน้อย 1 คน" }
+      }
+    }
+    existing.isActive = data.isActive
   }
 
   users[idx] = existing

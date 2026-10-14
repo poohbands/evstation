@@ -93,6 +93,9 @@ export interface MockSettings {
   defaultCustomerAddress: string
   defaultCustomerTaxId: string
   defaultCustomerBranch: string
+  isMaintenanceMode?: boolean
+  maintenanceMessage?: string
+  maintenanceUntil?: string
   createdAt: string
   updatedAt: string
 }
@@ -120,6 +123,9 @@ let mockSettings: MockSettings = {
   defaultCustomerAddress: PEA_HEADQUARTERS.address,
   defaultCustomerTaxId: PEA_HEADQUARTERS.taxId,
   defaultCustomerBranch: PEA_HEADQUARTERS.branch,
+  isMaintenanceMode: false,
+  maintenanceMessage: "ระบบกำลังปิดปรับปรุงชั่วคราวเพื่ออัปเกรดระบบและเพิ่มประสิทธิภาพ กรุณากลับมาใหม่อีกครั้งในภายหลัง",
+  maintenanceUntil: "เร็วๆ นี้",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 }

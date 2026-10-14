@@ -12,6 +12,7 @@ export interface User {
   username: string
   name: string
   role: UserRole
+  isActive?: boolean
   createdAt: string
 }
 
@@ -158,6 +159,9 @@ export interface OrganizationSettingsData {
   defaultCustomerAddress?: string
   defaultCustomerTaxId?: string
   defaultCustomerBranch?: string
+  isMaintenanceMode?: boolean
+  maintenanceMessage?: string
+  maintenanceUntil?: string
 }
 
 export interface PeaMonthlyFee {

@@ -38,13 +38,13 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, username, password, name, role } = body
+    const { id, username, password, name, role, isActive } = body
 
     if (!id) {
       return NextResponse.json({ error: "ไม่พบรหัสผู้ใช้ที่ต้องการแก้ไข" }, { status: 400 })
     }
 
-    const result = updateUser(id, { username, password, name, role })
+    const result = updateUser(id, { username, password, name, role, isActive })
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
