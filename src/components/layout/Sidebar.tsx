@@ -160,7 +160,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         {/* User Profile & Role Section */}
         <div className="border-t border-slate-800 p-3 space-y-2">
-          {user ? (
+          {user && !(pathname === "/" && user.username === "admin") ? (
             <div className="rounded-lg bg-slate-800/80 p-2.5 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 overflow-hidden">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600/30 text-blue-300 ring-1 ring-blue-500/40">
@@ -182,14 +182,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 <LogOut className="h-4 w-4" />
               </button>
             </div>
-          ) : (
+          ) : !user ? (
             <Link
               href="/login"
               className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-xs font-medium text-white hover:bg-blue-500"
             >
               <span>เข้าสู่ระบบ</span>
             </Link>
-          )}
+          ) : null}
 
           <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
             <span className="flex items-center gap-1">

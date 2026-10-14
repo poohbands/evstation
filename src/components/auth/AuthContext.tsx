@@ -26,16 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         setUser(JSON.parse(stored))
       } else {
-        // Default auto-login as admin for instant preview convenience
-        const defaultAdmin: User = {
-          id: "user-admin",
-          username: "admin",
-          name: "ผู้ดูแลระบบ (Admin)",
-          role: "ADMIN",
-          createdAt: new Date().toISOString(),
-        }
-        setUser(defaultAdmin)
-        localStorage.setItem("ev_user", JSON.stringify(defaultAdmin))
+        setUser(null)
       }
     } catch (e) {
       console.error("Auth load error:", e)

@@ -12,8 +12,8 @@ import { Zap, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from "lucide-r
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
-  const [username, setUsername] = useState("admin")
-  const [password, setPassword] = useState("sakura4923")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -72,7 +72,7 @@ export default function LoginPage() {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="admin"
+                    placeholder="ชื่อผู้ใช้"
                     className="pl-9 bg-slate-900/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
                     required
                   />
@@ -92,18 +92,6 @@ export default function LoginPage() {
                     className="pl-9 bg-slate-900/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
                     required
                   />
-                </div>
-              </div>
-
-              {/* Pre-filled credentials hint */}
-              <div className="rounded-lg bg-slate-900/90 border border-slate-700/60 p-3 text-xs space-y-1 text-slate-300">
-                <div className="flex items-center gap-1.5 font-semibold text-blue-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>ข้อมูลบัญชีเริ่มต้นสำหรับทดสอบ:</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1 pt-1 font-mono text-[11px] text-slate-400">
-                  <div>User: <span className="text-amber-300">admin</span></div>
-                  <div>Pass: <span className="text-amber-300">sakura4923</span></div>
                 </div>
               </div>
             </CardContent>
