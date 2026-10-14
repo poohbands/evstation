@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model OrganizationSettings {
+  id                    String   @id @default(cuid())
+  companyName           String   @default("")
+  address               String   @default("")
+  taxId                 String   @default("")
+  phone                 String   @default("")
+  email                 String   @default("")
+  bankName              String   @default("")
+  bankAccountNo         String   @default("")
+  bankAccountName       String   @default("")
+  signerName            String   @default("")
+  signerTitle           String   @default("")
+  logoUrl               String   @default("")
+  defaultCustomerName   String   @default("")
+  defaultCustomerAddress String  @default("")
+  defaultCustomerTaxId  String   @default("")
+  defaultCustomerBranch String   @default("")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Document {
+  id              String         @id @default(cuid())
+  docNumber       String         @unique
+  docType         String         // INV_ELEC, REC_ELEC, INV_RENT, REC_RENT
+  refInvoiceId    String?        // reference to parent invoice when this is a receipt
+  issueDate       DateTime
+  dueDate         DateTime?
+  billingMonth    Int
+  billingYear     Int
+  stationName     String         @default("")
+  customerName    String         @default("")
+  customerAddress String         @default("")
+  customerTaxId   String         @default("")
+  customerBranch  String         @default("")
+  contractRef     String         @default("")
+  subtotal        Float          @default(0)
+  vatRate         Float          @default(7)
+  vatAmount       Float          @default(0)
+  whtRate         Float          @default(3)
+  whtAmount       Float          @default(0)
+  grandTotal      Float          @default(0)
+  netPayable      Float          @default(0)
+  enableVat       Boolean        @default(true)
+  enableWht       Boolean        @default(true)
+  status          String         @default("PENDING") // PENDING, PAID, CANCELLED
+  paymentDate     DateTime?
+  paymentMethod   String?        // TRANSFER, CHEQUE, CASH
+  paymentRef      String?
+  notes           String         @default("")
+  thaiBahtText    String         @default("")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  items           DocumentItem[]
+  refInvoice      Document?      @relation("InvoiceReceipts", fields: [refInvoiceId], references: [id])
+  receipts        Document[]     @relation("InvoiceReceipts")
+}
+
+model DocumentItem {
+  id            String   @id @default(cuid())
+  documentId    String
+  itemOrder     Int
+  description   String
+  quantity      Float    @default(0)
+  unitName      String   @default("")
+  unitPrice     Float    @default(0)
+  amount        Float    @default(0)
+  meterPrevious Float?
+  meterCurrent  Float?
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
