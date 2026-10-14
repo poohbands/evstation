@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Zap, Lock, User as UserIcon, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Zap, Lock, User as UserIcon, AlertCircle, Eye, EyeOff } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -85,13 +86,26 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="pl-9 bg-slate-900/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
+                    className="pl-9 pr-10 bg-slate-900/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-blue-500"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 p-0.5 text-slate-400 hover:text-white transition"
+                    title={showPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                    aria-label={showPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
             </CardContent>

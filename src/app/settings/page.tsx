@@ -20,6 +20,8 @@ import {
   Edit3,
   AlertTriangle,
   Key,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -60,6 +62,7 @@ export default function SettingsPage() {
   const [usersLoading, setUsersLoading] = React.useState(false)
   const [newUsername, setNewUsername] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
+  const [showNewPassword, setShowNewPassword] = React.useState(false)
   const [newName, setNewName] = React.useState("")
   const [newRole, setNewRole] = React.useState<"ADMIN" | "ACCOUNTANT" | "VIEWER">("ACCOUNTANT")
   const [creatingUser, setCreatingUser] = React.useState(false)
@@ -71,6 +74,7 @@ export default function SettingsPage() {
   const [editName, setEditName] = React.useState("")
   const [editRole, setEditRole] = React.useState<UserRole>("VIEWER")
   const [editPassword, setEditPassword] = React.useState("")
+  const [showEditPassword, setShowEditPassword] = React.useState(false)
   const [updatingUser, setUpdatingUser] = React.useState(false)
 
   // Delete User Confirmation Modal state
@@ -728,15 +732,26 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="newUserPassword" className="text-xs">รหัสผ่าน (Password)</Label>
-                  <Input
-                    id="newUserPassword"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="h-9 text-xs"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="newUserPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="h-9 text-xs pr-8"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-2 top-2 p-0.5 text-slate-400 hover:text-slate-700 transition"
+                      title={showNewPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                      aria-label={showNewPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                    >
+                      {showNewPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="newUserName" className="text-xs">ชื่อ-นามสกุล / ตำแหน่ง</Label>
@@ -904,13 +919,24 @@ export default function SettingsPage() {
 
               <div>
                 <Label>รหัสผ่านใหม่ (Reset Password)</Label>
-                <Input
-                  type="password"
-                  value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
-                  placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน"
-                  className="mt-1"
-                />
+                <div className="relative mt-1">
+                  <Input
+                    type={showEditPassword ? "text" : "password"}
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="absolute right-2.5 top-2.5 p-0.5 text-slate-400 hover:text-slate-700 transition"
+                    title={showEditPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                    aria-label={showEditPassword ? "ซ่อนรหัสผ่าน" : "ดูรหัสผ่าน"}
+                  >
+                    {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <span className="text-[11px] text-slate-400 mt-1 block">
                   * หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นว่างไว้
                 </span>
