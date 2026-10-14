@@ -21,6 +21,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -49,6 +50,7 @@ import {
   PAYMENT_METHOD_LABELS,
   THAI_MONTHS,
   PEA_HEADQUARTERS,
+  PEA_GOOGLE_DRIVE_URL,
 } from "@/lib/utils"
 import {
   calculateSubtotal,
@@ -222,15 +224,29 @@ function CreateDocumentForm() {
   const grandTotal = calculateGrandTotal(subtotal, vatAmount)
   const netPayable = calculateNetPayable(grandTotal, whtAmount)
 
-  // Strict Date Validation Rule Check
+  // Strict Date Validation Rule Check (Invoice Date MUST be strictly BEFORE Receipt Date)
   const isDateInvalid = React.useMemo(() => {
     if (isPairedMode) {
       const invD = new Date(issueDate)
       const recD = new Date(receiptDate)
-      return recD < invD
+      return invD >= recD
     }
     return false
   }, [isPairedMode, issueDate, receiptDate])
+
+  // Handle Invoice Date change and auto-adjust Receipt Date to be at least +1 day
+  const handleIssueDateChange = (val: string) => {
+    setIssueDate(val)
+    if (isPairedMode && val) {
+      const invD = new Date(val)
+      const recD = new Date(receiptDate)
+      if (recD <= invD) {
+        const next = new Date(invD)
+        next.setDate(next.getDate() + 1)
+        setReceiptDate(next.toISOString().split("T")[0])
+      }
+    }
+  }
 
   // Add Item Row
   const handleAddItem = () => {
@@ -278,7 +294,7 @@ function CreateDocumentForm() {
     if (isDateInvalid) {
       toast({
         title: "วันที่เอกสารไม่ถูกต้องตามระเบียบ กฟภ.",
-        description: "วันที่ในใบแจ้งหนี้ต้องเป็นวันที่มาก่อนหรือวันเดียวกับใบเสร็จรับเงิน/ใบกำกับภาษีเท่านั้น",
+        description: "วันที่ในใบแจ้งหนี้ต้องเป็นวันที่ก่อนใบเสร็จรับเงิน/ใบกำกับภาษีเท่านั้น (ห้ามใช้วันเดียวกัน และห้ามใบเสร็จมาก่อน)",
         variant: "destructive",
       })
       return
@@ -442,25 +458,51 @@ function CreateDocumentForm() {
                   </div>
                 </div>
 
-                {/* VAT Mode Toggle inside Calculator */}
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-blue-200 text-xs">
-                  <span className={!isVatRegistered ? "font-bold text-slate-800" : "text-slate-400"}>
-                    ไม่จด VAT
-                  </span>
-                  <Switch
-                    checked={isVatRegistered}
-                    onCheckedChange={(val) => {
-                      setIsVatRegistered(val)
-                      setEnableVat(val)
-                    }}
-                  />
-                  <span className={isVatRegistered ? "font-bold text-blue-700" : "text-slate-400"}>
-                    จด VAT 7%
-                  </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={PEA_GOOGLE_DRIVE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 text-xs font-medium border border-blue-300 transition"
+                    title="เปิดดูโฟลเดอร์ Google Drive ตัวอย่างเอกสารและแนวปฏิบัติของ กฟภ."
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>ตัวอย่างเอกสาร กฟภ. (Drive)</span>
+                  </a>
+
+                  {/* VAT Mode Toggle inside Calculator */}
+                  <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-blue-200 text-xs shadow-xs">
+                    <span className={!isVatRegistered ? "font-bold text-slate-800" : "text-slate-400"}>
+                      ไม่จด VAT
+                    </span>
+                    <Switch
+                      checked={isVatRegistered}
+                      onCheckedChange={(val) => {
+                        setIsVatRegistered(val)
+                        setEnableVat(val)
+                      }}
+                    />
+                    <span className={isVatRegistered ? "font-bold text-blue-700" : "text-slate-400"}>
+                      จด VAT 7%
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
+              {/* SLA & Official Policy Banner */}
+              <div className="rounded-lg border border-blue-200 bg-blue-100/60 p-3 text-xs text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-blue-700 shrink-0" />
+                  <span>
+                    <strong>กำหนดเวลาเบิกจ่ายเงิน (SLA):</strong> ประมาณ <strong>35 วันทำการ</strong> (หรือ <strong>45 วันทำการสำหรับงวดแรก</strong>) หลังจาก กฟภ. ได้รับเอกสารตัวจริงครบถ้วน (ระยะเวลาอย่างน้อย 1 เดือน)
+                  </span>
+                </div>
+                <span className="text-[11px] text-blue-800 shrink-0 font-medium">
+                  * วันที่ใบแจ้งหนี้ต้องเป็นวันที่ก่อนใบเสร็จ
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Inputs Box */}
                 <div className="space-y-3 bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
@@ -630,7 +672,7 @@ function CreateDocumentForm() {
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-300 text-red-800 text-xs">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
                 <span className="font-medium">
-                  <strong>ผิดกฎระเบียบ กฟภ.!</strong> วันที่ในใบแจ้งหนี้ ({issueDate}) ต้องเป็นวันที่มาก่อนหรือวันเดียวกันกับใบเสร็จรับเงิน ({receiptDate}) เท่านั้น
+                  <strong>ผิดกฎระเบียบ กฟภ.!</strong> วันที่ในใบแจ้งหนี้ ({issueDate}) ต้องเป็นวันที่ก่อนใบเสร็จรับเงิน ({receiptDate}) เท่านั้น (ห้ามใช้วันเดียวกัน และห้ามใบเสร็จมาก่อน)
                 </span>
               </div>
             )}
@@ -644,7 +686,7 @@ function CreateDocumentForm() {
                   id="issueDate"
                   type="date"
                   value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
+                  onChange={(e) => handleIssueDateChange(e.target.value)}
                   className="h-9 text-xs"
                   required
                 />

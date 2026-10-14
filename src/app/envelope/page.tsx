@@ -14,12 +14,13 @@ import {
   AlertCircle,
   Copy,
   Check,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PEA_ENVELOPE_RECIPIENT, PEA_HEADQUARTERS } from "@/lib/utils"
+import { PEA_ENVELOPE_RECIPIENT, PEA_HEADQUARTERS, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
 import type { OrganizationSettingsData, DocumentWithItems } from "@/types"
 
@@ -94,6 +95,17 @@ function EnvelopeCoverContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href={PEA_GOOGLE_DRIVE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              <ExternalLink className="h-3.5 w-3.5" />
+              ตัวอย่างเอกสาร กฟภ. (Drive)
+            </Button>
+          </a>
+
           <Button
             variant="outline"
             size="sm"
@@ -200,7 +212,7 @@ function EnvelopeCoverContent() {
                 />
                 <div>
                   <span className="font-semibold text-slate-900">ต้นฉบับใบแจ้งหนี้ (Original Invoice)</span>
-                  <div className="text-[11px] text-slate-500">* วันที่ต้องเป็นวันที่มาก่อนหรือวันเดียวกับใบเสร็จ</div>
+                  <div className="text-[11px] text-slate-500">* วันที่ต้องเป็นวันที่ก่อนใบเสร็จรับเงิน (ตามกฎระเบียบ กฟภ.)</div>
                 </div>
               </label>
 
@@ -282,6 +294,16 @@ function EnvelopeCoverContent() {
                   </div>
                 </div>
               </label>
+            </div>
+
+            {/* Official PEA SLA & Procedure Notes */}
+            <div className="mt-4 pt-3 border-t border-slate-200 text-[11px] text-slate-600 space-y-1">
+              <div>
+                <strong>&bull; กำหนดเวลาเบิกจ่ายเงิน (SLA):</strong> หลังจาก กฟภ. ได้รับเอกสารตัวจริงครบถ้วน กระบวนการเบิกจ่ายจะเริ่มต้นและใช้เวลาประมาณ <strong>35 วันทำการ</strong> (สำหรับ<strong>งวดแรก</strong>ใช้เวลาประมาณ <strong>45 วันทำการ</strong> หรืออย่างน้อย 1 เดือน)
+              </div>
+              <div>
+                <strong>&bull; การแจ้งจัดส่ง:</strong> เมื่อจัดส่งเอกสารทางไปรษณีย์เรียบร้อยแล้ว รบกวนแจ้งหมายเลขพัสดุ (Tracking No.) ให้เจ้าหน้าที่ กฟภ. ทราบทาง LINE
+              </div>
             </div>
           </div>
         </div>

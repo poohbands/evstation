@@ -16,8 +16,9 @@ import {
   LogOut,
   Shield,
   User as UserIcon,
+  ExternalLink,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useAuth } from "@/components/auth/AuthContext"
 
 interface SidebarProps {
@@ -155,6 +156,24 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 </Link>
               )
             })}
+
+            <div className="pt-2 mt-2 border-t border-slate-800">
+              <a
+                href={PEA_GOOGLE_DRIVE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onClose}
+                className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <ExternalLink className="h-4 w-4 text-slate-500 group-hover:text-blue-400" />
+                  <span>คู่มือ & ตัวอย่าง กฟภ. (Drive)</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300 border border-blue-800 font-mono">
+                  Drive
+                </span>
+              </a>
+            </div>
           </nav>
         </div>
 

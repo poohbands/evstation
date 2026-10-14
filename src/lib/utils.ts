@@ -109,6 +109,12 @@ export const PEA_ENVELOPE_RECIPIENT = {
 }
 
 /**
+ * Official Google Drive link for PEA VOLTA Connext guidelines & sample documents
+ */
+export const PEA_GOOGLE_DRIVE_URL =
+  "https://drive.google.com/drive/folders/1BXsj0hRlBY6JhHEgUEdNjPNgL6VJDc79?usp=sharing"
+
+/**
  * Generate LINE notification message to send to PEA Officer with tracking number
  */
 export function generatePeaLineMessage(params: {
@@ -132,3 +138,29 @@ export function generatePeaLineMessage(params: {
 
 รบกวนตรวจสอบและดำเนินการตามขั้นตอนให้ด้วยนะคะ/ครับ ขอบพระคุณมากค่ะ/ครับ`.trim()
 }
+
+/**
+ * Generate LINE notification message when submitting monthly fee payment receipt to PEA
+ */
+export function generatePeaMonthlyFeeLineMessage(params: {
+  monthYear: string
+  stationName: string
+  ref1: string
+  ref2: string
+  amount: number
+  channel: string
+}): string {
+  return `เรียน คุณระวีพร (การไฟฟ้าส่วนภูมิภาค / PEA VOLTA)
+
+ขอส่งภาพหลักฐานใบเสร็จรับเงินค่าบริการรายเดือน เพื่อนำมาแนบประกอบการเบิกเงินค่าอัดประจุไฟฟ้าค่ะ/ครับ
+- ประจำงวด: ${params.monthYear}
+- สถานีบริการ: ${params.stationName}
+- หมายเลขบัญชีสัญญา (Ref.1): ${params.ref1}
+- หมายเลขใบแจ้งหนี้ (Ref.2): ${params.ref2}
+- ยอดเงินที่ชำระ: ${formatCurrency(params.amount)} บาท
+- ช่องทางการชำระ: ${params.channel}
+
+(แนบรูปภาพใบเสร็จรับเงินด้านล่างนี้แล้วค่ะ/ครับ)
+รบกวนแนบประกอบการเบิกจ่ายให้ด้วยนะคะ/ครับ ขอบพระคุณค่ะ/ครับ`.trim()
+}
+

@@ -13,6 +13,12 @@ import {
   Receipt,
   Download,
   Loader2,
+  Copy,
+  Check,
+  MessageSquare,
+  Send,
+  Building,
+  Info,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -42,7 +48,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
-import { formatCurrency, formatDate, THAI_MONTHS } from "@/lib/utils"
+import {
+  formatCurrency,
+  formatDate,
+  THAI_MONTHS,
+  PEA_GOOGLE_DRIVE_URL,
+  generatePeaMonthlyFeeLineMessage,
+} from "@/lib/utils"
 import type { PeaMonthlyFee } from "@/types"
 
 export default function MonthlyFeesPage() {
@@ -51,6 +63,8 @@ export default function MonthlyFeesPage() {
   const [loading, setLoading] = React.useState(true)
   const [openModal, setOpenModal] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
+  const [stationName, setStationName] = React.useState("สถานีชาร์จ กรีนชาร์จ คลองหลวง")
+  const [copiedId, setCopiedId] = React.useState<string | null>(null)
 
   // New Fee Form State
   const now = new Date()
@@ -80,7 +94,35 @@ export default function MonthlyFeesPage() {
 
   React.useEffect(() => {
     fetchFees()
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.companyName) setStationName(d.companyName)
+      })
+      .catch(() => {})
   }, [fetchFees])
+
+  const handleCopyMonthlyFeeLine = (fee: PeaMonthlyFee) => {
+    const channelName =
+      fee.paymentChannel === "PEA_SMART_PLUS"
+        ? "แอปพลิเคชัน PEA SMART Plus"
+        : "เคาน์เตอร์การไฟฟ้าส่วนภูมิภาค"
+    const text = generatePeaMonthlyFeeLineMessage({
+      monthYear: `${THAI_MONTHS[fee.billingMonth - 1]} ${fee.billingYear + 543}`,
+      stationName: fee.stationName || stationName,
+      ref1: fee.ref1Contract,
+      ref2: fee.ref2Invoice,
+      amount: fee.amount,
+      channel: channelName,
+    })
+    navigator.clipboard.writeText(text)
+    setCopiedId(fee.id)
+    toast({
+      title: "คัดลอกข้อความส่ง LINE สำเร็จ",
+      description: "สามารถนำไปวางในห้องแชต LINE เจ้าหน้าที่ กฟภ. พร้อมแนบรูปภาพใบเสร็จได้ทันที",
+    })
+    setTimeout(() => setCopiedId(null), 2500)
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -152,157 +194,217 @@ export default function MonthlyFeesPage() {
             </p>
           </div>
 
-          <Dialog open={openModal} onOpenChange={setOpenModal}>
-            <DialogTrigger asChild>
-              <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-medium">
-                <Plus className="h-4 w-4" />
-                บันทึกการชำระใหม่
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={PEA_GOOGLE_DRIVE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button
+                variant="outline"
+                className="border-purple-200 text-purple-700 hover:bg-purple-50 gap-2 text-xs font-medium"
+              >
+                <ExternalLink className="h-4 w-4" />
+                คู่มือ & ตัวอย่าง กฟภ. (Drive)
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md font-prompt">
-              <DialogHeader>
-                <DialogTitle className="text-base text-slate-900">
-                  บันทึกการชำระค่าบริการ PEA VOLTA
-                </DialogTitle>
-                <DialogDescription className="text-xs">
-                  กรอกข้อมูลจากสลิปหรือใบแจ้งหนี้ค่าบริการรายเดือน กฟภ.
-                </DialogDescription>
-              </DialogHeader>
+            </a>
 
-              <form onSubmit={handleCreate} className="space-y-4 pt-2">
-                <div className="grid grid-cols-2 gap-3">
+            <Dialog open={openModal} onOpenChange={setOpenModal}>
+              <DialogTrigger asChild>
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-medium">
+                  <Plus className="h-4 w-4" />
+                  บันทึกการชำระใหม่
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md font-prompt">
+                <DialogHeader>
+                  <DialogTitle className="text-base text-slate-900">
+                    บันทึกการชำระค่าบริการ PEA VOLTA
+                  </DialogTitle>
+                  <DialogDescription className="text-xs">
+                    กรอกข้อมูลจากสลิปหรือใบแจ้งหนี้ค่าบริการรายเดือน กฟภ.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form onSubmit={handleCreate} className="space-y-4 pt-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">ประจำเดือน</Label>
+                      <Select value={month.toString()} onValueChange={(v) => setMonth(parseInt(v, 10))}>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {THAI_MONTHS.map((m, idx) => (
+                            <SelectItem key={m} value={(idx + 1).toString()}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">ประจำปี (พ.ศ.)</Label>
+                      <Input
+                        type="number"
+                        value={year + 543}
+                        onChange={(e) => setYear((parseInt(e.target.value, 10) || year + 543) - 543)}
+                        className="h-9 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
-                    <Label className="text-xs">ประจำเดือน</Label>
-                    <Select value={month.toString()} onValueChange={(v) => setMonth(parseInt(v, 10))}>
+                    <Label htmlFor="ref1" className="text-xs">หมายเลขบัญชีแสดงสัญญา (REF No.1)</Label>
+                    <Input
+                      id="ref1"
+                      value={ref1}
+                      onChange={(e) => setRef1(e.target.value)}
+                      placeholder="เช่น 020018475923"
+                      className="h-9 text-xs font-mono"
+                      required
+                    />
+                    <p className="text-[10px] text-slate-400">เลข 12 หลัก อยู่ด้านล่างของใบแจ้งหนี้ กฟภ.</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="ref2" className="text-xs">หมายเลขใบแจ้งหนี้ (REF No.2)</Label>
+                    <Input
+                      id="ref2"
+                      value={ref2}
+                      onChange={(e) => setRef2(e.target.value)}
+                      placeholder="เช่น 910248593821"
+                      className="h-9 text-xs font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="amount" className="text-xs">ยอดเงินที่ชำระ (บาท)</Label>
+                      <Input
+                        id="amount"
+                        type="number"
+                        step="0.01"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="h-9 text-xs font-mono font-bold"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="payDate" className="text-xs">วันที่ชำระ</Label>
+                      <Input
+                        id="payDate"
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                        className="h-9 text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">ช่องทางการชำระ</Label>
+                    <Select
+                      value={paymentChannel}
+                      onValueChange={(v: any) => setPaymentChannel(v)}
+                    >
                       <SelectTrigger className="h-9 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {THAI_MONTHS.map((m, idx) => (
-                          <SelectItem key={m} value={(idx + 1).toString()}>
-                            {m}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="PEA_SMART_PLUS">แอปพลิเคชัน PEA SMART Plus (โหลดใบเสร็จใน 2-3 วัน)</SelectItem>
+                        <SelectItem value="COUNTER">เคาน์เตอร์การไฟฟ้าส่วนภูมิภาค (ได้สลิปทันที)</SelectItem>
+                        <SelectItem value="OTHER">อื่นๆ</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs">ประจำปี (พ.ศ.)</Label>
+                    <Label htmlFor="notes" className="text-xs">หมายเหตุ</Label>
                     <Input
-                      type="number"
-                      value={year + 543}
-                      onChange={(e) => setYear((parseInt(e.target.value, 10) || year + 543) - 543)}
-                      className="h-9 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="ref1" className="text-xs">หมายเลขบัญชีแสดงสัญญา (REF No.1)</Label>
-                  <Input
-                    id="ref1"
-                    value={ref1}
-                    onChange={(e) => setRef1(e.target.value)}
-                    placeholder="เช่น 020018475923"
-                    className="h-9 text-xs font-mono"
-                    required
-                  />
-                  <p className="text-[10px] text-slate-400">เลข 12 หลัก อยู่ด้านล่างของใบแจ้งหนี้ กฟภ.</p>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="ref2" className="text-xs">หมายเลขใบแจ้งหนี้ (REF No.2)</Label>
-                  <Input
-                    id="ref2"
-                    value={ref2}
-                    onChange={(e) => setRef2(e.target.value)}
-                    placeholder="เช่น 910248593821"
-                    className="h-9 text-xs font-mono"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="amount" className="text-xs">ยอดเงินที่ชำระ (บาท)</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      step="0.01"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="h-9 text-xs font-mono font-bold"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="payDate" className="text-xs">วันที่ชำระ</Label>
-                    <Input
-                      id="payDate"
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="เช่น ชำระตรงรอบบิล"
                       className="h-9 text-xs"
-                      required
                     />
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <Label className="text-xs">ช่องทางการชำระ</Label>
-                  <Select
-                    value={paymentChannel}
-                    onValueChange={(v: any) => setPaymentChannel(v)}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PEA_SMART_PLUS">แอปพลิเคชัน PEA SMART Plus</SelectItem>
-                      <SelectItem value="COUNTER">เคาน์เตอร์การไฟฟ้าส่วนภูมิภาค</SelectItem>
-                      <SelectItem value="OTHER">อื่นๆ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="notes" className="text-xs">หมายเหตุ</Label>
-                  <Input
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="เช่น ชำระตรงรอบบิล"
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <DialogFooter className="pt-2">
-                  <Button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-purple-600 hover:bg-purple-700 text-white w-full text-xs"
-                  >
-                    {submitting ? "กำลังบันทึก..." : "บันทึกการชำระเงิน"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <DialogFooter className="pt-2">
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="bg-purple-600 hover:bg-purple-700 text-white w-full text-xs"
+                    >
+                      {submitting ? "กำลังบันทึก..." : "บันทึกการชำระเงิน"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {/* Info Instruction Banner */}
-        <div className="rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 p-4 space-y-2 text-xs text-slate-700">
-          <div className="flex items-center gap-2 font-bold text-sm text-purple-900">
-            <Smartphone className="h-4 w-4 text-purple-600" />
-            <span>ขั้นตอนการชำระค่าแรกเข้า & ค่าบริการรายเดือน VOLTA Connext ผ่านแอป PEA SMART Plus:</span>
+        {/* Rolling Process Guide Banner */}
+        <div className="rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 p-5 space-y-4 text-xs text-slate-700 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-purple-200/70">
+            <div className="flex items-center gap-2 font-bold text-sm text-purple-950">
+              <span className="p-1.5 rounded-md bg-purple-600 text-white">
+                <CreditCard className="h-4 w-4" />
+              </span>
+              <span>ขั้นตอนและกระบวนการ Rolling ค่าบริการรายเดือน VOLTA CONNEXT:</span>
+            </div>
+            <span className="text-[11px] font-semibold text-purple-700 bg-purple-100/80 px-2.5 py-0.5 rounded-full">
+              รอบบิลหมุนเวียนประจำทุกเดือน
+            </span>
           </div>
-          <ol className="list-decimal pl-5 space-y-1 text-slate-600">
-            <li>เปิดแอป <strong>PEA SMART Plus</strong> &rarr; เลือกเมนู <strong>"ค่าบริการอื่น ๆ"</strong></li>
-            <li>กรอก <strong>หมายเลขบัญชีแสดงสัญญา (Ref.1)</strong> และ <strong>หมายเลขใบแจ้งหนี้ (Ref.2)</strong> ที่ระบุด้านล่างใบแจ้งหนี้ กฟภ.</li>
-            <li>ตรวจสอบยอดชำระและเลือกชำระเงินผ่าน Mobile Banking หรือ QR Code แล้วนำข้อมูลมาบันทึกในหน้านี้</li>
-          </ol>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg bg-white/80 border border-purple-100 space-y-1">
+              <div className="font-bold text-purple-900 flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-[10px] text-white">1</span>
+                <span>กฟภ. ส่งใบแจ้งหนี้</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                ทุกๆ <strong>ต้นเดือน</strong> กฟภ. จะส่งใบแจ้งหนี้เรียกเก็บค่าบริการรายเดือนให้ทางห้องแชต LINE
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-white/80 border border-purple-100 space-y-1">
+              <div className="font-bold text-indigo-900 flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] text-white">2</span>
+                <span>ผู้ประกอบการชำระเงิน</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                ชำระได้ 2 ช่องทาง: <strong>เคาน์เตอร์การไฟฟ้า</strong> ใกล้คุณ หรือแอป <strong>PEA SMART Plus</strong> (ระบุ Ref.1 และ Ref.2)
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-white/80 border border-purple-100 space-y-1">
+              <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] text-white">3</span>
+                <span>รับหลักฐานใบเสร็จ</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                เคาน์เตอร์ กฟภ. ได้รับสลิปทันที / แอป Smart Plus รอ <strong>2-3 วัน</strong> เพื่อ Download ใบเสร็จจากในแอป
+              </p>
+            </div>
+
+            <div className="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 space-y-1">
+              <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">4</span>
+                <span>ส่งภาพใบเสร็จทาง LINE</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                <strong>สำคัญ:</strong> เมื่อได้ใบเสร็จแล้ว ส่งภาพถ่ายให้ กฟภ. ทาง LINE เพื่อใช้แนบประกอบการเบิกเงินค่าอัดประจุไฟฟ้า
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Summary Metric Cards */}
@@ -327,10 +429,10 @@ export default function MonthlyFeesPage() {
 
           <Card className="border-slate-100 bg-white shadow-sm">
             <CardHeader className="pb-2">
-              <CardDescription className="text-xs">ช่องทางหลัก</CardDescription>
+              <CardDescription className="text-xs">ช่องทางชำระเงินหลัก</CardDescription>
               <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                <span>PEA SMART Plus</span>
+                <span>PEA SMART Plus & เคาน์เตอร์</span>
               </CardTitle>
             </CardHeader>
           </Card>
@@ -339,8 +441,11 @@ export default function MonthlyFeesPage() {
         {/* Data Table */}
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="bg-slate-50/70 border-b border-slate-100 py-3">
-            <CardTitle className="text-sm font-bold text-slate-900">
-              ประวัติการชำระค่าบริการรายเดือน (Payment History)
+            <CardTitle className="text-sm font-bold text-slate-900 flex items-center justify-between">
+              <span>ประวัติการชำระค่าบริการรายเดือน (Payment History)</span>
+              <span className="text-xs font-normal text-slate-500">
+                กดปุ่ม "ส่งภาพทาง LINE" เพื่อคัดลอกข้อความนำส่งใบเสร็จให้ กฟภ.
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -365,7 +470,8 @@ export default function MonthlyFeesPage() {
                       <th className="py-2.5 px-3">ช่องทาง</th>
                       <th className="py-2.5 px-3 text-right">ยอดชำระ</th>
                       <th className="py-2.5 px-3 text-center">สถานะ</th>
-                      <th className="py-2.5 px-3 text-right">จัดการ</th>
+                      <th className="py-2.5 px-3 text-center">นำส่งภาพให้ กฟภ.</th>
+                      <th className="py-2.5 px-3 text-right">ลบ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -379,7 +485,7 @@ export default function MonthlyFeesPage() {
                         <td className="py-3 px-3 text-slate-600">{formatDate(fee.paymentDate)}</td>
                         <td className="py-3 px-3">
                           <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium">
-                            {fee.paymentChannel === "PEA_SMART_PLUS" ? "PEA SMART Plus" : "เคาน์เตอร์ กฟภ."}
+                            {fee.paymentChannel === "PEA_SMART_PLUS" ? "PEA SMART Plus (2-3 วัน)" : "เคาน์เตอร์ กฟภ. (ทันที)"}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
@@ -390,6 +496,27 @@ export default function MonthlyFeesPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             ชำระแล้ว
                           </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopyMonthlyFeeLine(fee)}
+                            className="h-7 text-[11px] gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                            title="คัดลอกข้อความนำส่งภาพใบเสร็จเพื่อส่งให้ กฟภ. ทาง LINE"
+                          >
+                            {copiedId === fee.id ? (
+                              <>
+                                <Check className="h-3 w-3 text-emerald-600" />
+                                <span>คัดลอกแล้ว!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3 w-3 text-emerald-600" />
+                                <span>ส่งภาพทาง LINE</span>
+                              </>
+                            )}
+                          </Button>
                         </td>
                         <td className="py-3 px-3 text-right">
                           <Button

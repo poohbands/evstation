@@ -244,7 +244,7 @@ function initMockDocuments(): MockDocument[] {
     trackingNumber: "ED839281745TH",
     shippingDate: "2026-10-01T09:00:00.000Z",
     peaReceivedDate: "2026-10-03T11:00:00.000Z",
-    estimatedPayoutDate: addBusinessDays("2026-10-03", 30).toISOString(),
+    estimatedPayoutDate: addBusinessDays("2026-10-03", 35).toISOString(),
   }
 
   // 2. September 2026 Electricity Receipt / Tax Invoice (Paired with Invoice)
@@ -299,7 +299,7 @@ function initMockDocuments(): MockDocument[] {
     trackingNumber: "ED839281745TH",
     shippingDate: "2026-10-01T09:00:00.000Z",
     peaReceivedDate: "2026-10-03T11:00:00.000Z",
-    estimatedPayoutDate: addBusinessDays("2026-10-03", 30).toISOString(),
+    estimatedPayoutDate: addBusinessDays("2026-10-03", 35).toISOString(),
   }
 
   // 3. August 2026 Electricity Claim (PAID)
@@ -799,7 +799,7 @@ export function updateMockDocument(id: string, data: any): MockDocument | null {
   const peaReceivedDate = data.peaReceivedDate !== undefined ? data.peaReceivedDate : existing.peaReceivedDate
   let estimatedPayoutDate = data.estimatedPayoutDate || existing.estimatedPayoutDate
   if (peaReceivedDate) {
-    const days = payoutType === "FIRST_TIME" ? 45 : 30
+    const days = payoutType === "FIRST_TIME" ? 45 : 35
     estimatedPayoutDate = addBusinessDays(peaReceivedDate, days).toISOString()
   }
 

@@ -1005,7 +1005,7 @@ function DocumentDetailContent() {
                             เอกสารกำลังจัดส่งไปยัง กฟภ.
                           </div>
                           <span className="text-[11px] text-slate-500">
-                            นับ SLA {document.payoutType === "FIRST_TIME" ? 45 : 30} วันทำการเมื่อ กฟภ. ลงรับ
+                            นับ SLA {document.payoutType === "FIRST_TIME" ? 45 : 35} วันทำการ (อย่างน้อย 1 เดือน) เมื่อ กฟภ. ลงรับ
                           </span>
                         </div>
                       ) : (
@@ -1780,8 +1780,8 @@ function DocumentDetailContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="REGULAR">รอบบิลปกติ (SLA 30 วันทำการ)</SelectItem>
-                  <SelectItem value="FIRST_TIME">ขอเบิกครั้งแรก (SLA 45 วันทำการ)</SelectItem>
+                  <SelectItem value="REGULAR">รอบบิลปกติ (SLA 35 วันทำการ / ประมาณ 1.5 เดือน)</SelectItem>
+                  <SelectItem value="FIRST_TIME">ขอเบิกครั้งแรก (SLA 45 วันทำการ / ประมาณ 2 เดือน)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

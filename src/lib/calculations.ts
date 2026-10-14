@@ -136,9 +136,12 @@ export function calculatePeaVoltaRevenue(params: {
 
 /**
  * Generate official mandatory description for PEA VOLTA
+ * Rule: "ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน .... ของสถานี ...."
  */
 export function generatePeaVoltaDescription(monthName: string, yearTh: number, stationName: string): string {
-  return `ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน ${monthName} ${yearTh} ของสถานีบริการ ${stationName}`.trim()
+  const cleanStation = stationName ? stationName.replace(/^สถานี(บริการ|ชาร์จ)?\s*/i, "").trim() : ""
+  const displayStation = cleanStation || stationName || ""
+  return `ค่าบริการอัดประจุยานยนต์ไฟฟ้าผ่าน PEA VOLTA Platform ประจำเดือน ${monthName} ${yearTh} ของสถานี ${displayStation}`.trim()
 }
 
 /**

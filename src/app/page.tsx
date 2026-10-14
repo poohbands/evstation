@@ -19,6 +19,7 @@ import {
   Mail,
   CreditCard,
   Building2,
+  ExternalLink,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -46,6 +47,7 @@ import {
   DOC_TYPE_LABELS,
   STATUS_LABELS,
   PAYOUT_STATUS_LABELS,
+  PEA_GOOGLE_DRIVE_URL,
 } from "@/lib/utils"
 import type { DashboardStats, DocumentWithItems } from "@/types"
 
@@ -202,7 +204,17 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={PEA_GOOGLE_DRIVE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs text-blue-700 border-blue-300 hover:bg-blue-50">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    คู่มือ & ตัวอย่าง กฟภ. (Drive)
+                  </Button>
+                </a>
                 <Link href="/envelope">
                   <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs text-purple-700 border-purple-300 hover:bg-purple-100/50">
                     <Mail className="h-3.5 w-3.5" />
@@ -257,7 +269,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between p-3 rounded-lg border border-purple-200 bg-purple-50/70 hover:bg-purple-100/60 transition cursor-pointer">
                   <div>
                     <span className="text-xs font-semibold text-purple-800 block">3. กฟภ. ลงรับแล้ว</span>
-                    <span className="text-[11px] text-purple-700">กำลังนับ SLA 30/45 วัน</span>
+                    <span className="text-[11px] text-purple-700">กำลังนับ SLA 35/45 วัน</span>
                   </div>
                   <span className="text-2xl font-bold text-purple-700 font-mono">
                     {stats.peaReceivedCount ?? 0}
