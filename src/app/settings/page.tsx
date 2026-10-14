@@ -17,6 +17,9 @@ import {
   Phone,
   Mail,
   Receipt,
+  Edit3,
+  AlertTriangle,
+  Key,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -32,10 +35,18 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/components/auth/AuthContext"
 import { PEA_HEADQUARTERS } from "@/lib/utils"
-import type { OrganizationSettingsData, User } from "@/types"
+import type { OrganizationSettingsData, User, UserRole } from "@/types"
 
 export default function SettingsPage() {
   const { toast } = useToast()
@@ -52,6 +63,20 @@ export default function SettingsPage() {
   const [newName, setNewName] = React.useState("")
   const [newRole, setNewRole] = React.useState<"ADMIN" | "ACCOUNTANT" | "VIEWER">("ACCOUNTANT")
   const [creatingUser, setCreatingUser] = React.useState(false)
+
+  // Edit User Modal state
+  const [editUserModalOpen, setEditUserModalOpen] = React.useState(false)
+  const [editingUserId, setEditingUserId] = React.useState("")
+  const [editUsername, setEditUsername] = React.useState("")
+  const [editName, setEditName] = React.useState("")
+  const [editRole, setEditRole] = React.useState<UserRole>("VIEWER")
+  const [editPassword, setEditPassword] = React.useState("")
+  const [updatingUser, setUpdatingUser] = React.useState(false)
+
+  // Delete User Confirmation Modal state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false)
+  const [deletingUser, setDeletingUser] = React.useState<{ id: string; username: string } | null>(null)
+  const [deletingLoading, setDeletingLoading] = React.useState(false)
 
   const [formData, setFormData] = React.useState<OrganizationSettingsData>({
     companyName: "",
@@ -208,16 +233,76 @@ export default function SettingsPage() {
     }
   }
 
-  const handleDeleteUser = async (id: string, username: string) => {
-    if (!confirm(`ยืนยันการลบผู้ใช้ ${username}?`)) return
+  const handleOpenEditUser = (u: User) => {
+    setEditingUserId(u.id)
+    setEditUsername(u.username)
+    setEditName(u.name)
+    setEditRole(u.role)
+    setEditPassword("")
+    setEditUserModalOpen(true)
+  }
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingUserId || !editUsername.trim() || !editName.trim()) return
+
     try {
-      const res = await fetch(`/api/users?id=${id}`, { method: "DELETE" })
+      setUpdatingUser(true)
+      const res = await fetch("/api/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingUserId,
+          username: editUsername.trim(),
+          name: editName.trim(),
+          role: editRole,
+          password: editPassword.trim() || undefined,
+        }),
+      })
+
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "ลบผู้ใช้ไม่สำเร็จ")
-      toast({ title: "ลบผู้ใช้สำเร็จ", description: `ผู้ใช้ ${username} ถูกลบออกจากระบบแล้ว` })
+      if (!res.ok) throw new Error(data.error || "แก้ไขข้อมูลผู้ใช้ไม่สำเร็จ")
+
+      toast({
+        title: "แก้ไขข้อมูลผู้ใช้งานสำเร็จ",
+        description: `อัปเดตข้อมูลผู้ใช้ ${editUsername} เรียบร้อยแล้ว`,
+      })
+      setEditUserModalOpen(false)
       fetchUsers()
     } catch (err: any) {
-      toast({ title: "เกิดข้อผิดพลาด", description: err.message, variant: "destructive" })
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingUser(false)
+    }
+  }
+
+  const handleConfirmDeleteUser = async () => {
+    if (!deletingUser) return
+    try {
+      setDeletingLoading(true)
+      const res = await fetch(`/api/users?id=${deletingUser.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "ลบผู้ใช้ไม่สำเร็จ")
+
+      toast({
+        title: "ลบผู้ใช้สำเร็จ",
+        description: `ผู้ใช้ ${deletingUser.username} ถูกลบออกจากระบบแล้ว`,
+      })
+      setDeleteConfirmOpen(false)
+      setDeletingUser(null)
+      fetchUsers()
+    } catch (err: any) {
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: err.message,
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingLoading(false)
     }
   }
 
@@ -732,18 +817,31 @@ export default function SettingsPage() {
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        {u.username !== "admin" ? (
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
-                            variant="ghost"
+                            type="button"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleDeleteUser(u.id, u.username)}
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleOpenEditUser(u)}
+                            className="h-7 text-xs px-2.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 gap-1 font-medium"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Edit3 className="h-3 w-3" />
+                            แก้ไข
                           </Button>
-                        ) : (
-                          <span className="text-slate-400 text-[10px] italic">หลัก</span>
-                        )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDeletingUser({ id: u.id, username: u.username })
+                              setDeleteConfirmOpen(true)
+                            }}
+                            className="h-7 text-xs px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 gap-1 font-medium"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            ลบ
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -752,6 +850,130 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit User Modal Dialog */}
+        <Dialog open={editUserModalOpen} onOpenChange={setEditUserModalOpen}>
+          <DialogContent className="sm:max-w-md font-prompt">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-slate-900">
+                <Edit3 className="h-5 w-5 text-blue-600" />
+                แก้ไขข้อมูลผู้ใช้งาน
+              </DialogTitle>
+              <DialogDescription>
+                ปรับปรุงชื่อผู้ใช้ ชื่อ-นามสกุล สิทธิ์การใช้งาน หรือตั้งรหัสผ่านใหม่
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleUpdateUser} className="space-y-4 py-2">
+              <div>
+                <Label>ชื่อผู้ใช้ (Username) *</Label>
+                <Input
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  required
+                  className="mt-1 font-mono"
+                />
+              </div>
+
+              <div>
+                <Label>ชื่อ-นามสกุล (Full Name) *</Label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>สิทธิ์การใช้งาน (Role) *</Label>
+                <Select
+                  value={editRole}
+                  onValueChange={(val: "ADMIN" | "ACCOUNTANT" | "VIEWER") => setEditRole(val)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">ผู้ดูแลระบบ (ADMIN) - สิทธิ์เต็ม</SelectItem>
+                    <SelectItem value="ACCOUNTANT">ฝ่ายการเงิน/บัญชี (ACCOUNTANT) - สร้าง/แก้ไขเอกสาร</SelectItem>
+                    <SelectItem value="VIEWER">ผู้ตรวจสอบ (VIEWER) - ดูและพิมพ์รายงานเท่านั้น</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>รหัสผ่านใหม่ (Reset Password)</Label>
+                <Input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน"
+                  className="mt-1"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  * หากไม่ต้องการเปลี่ยนรหัสผ่าน ให้เว้นว่างไว้
+                </span>
+              </div>
+
+              <DialogFooter className="mt-4 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditUserModalOpen(false)}
+                  disabled={updatingUser}
+                >
+                  ยกเลิก
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updatingUser}
+                  className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {updatingUser ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete User Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent className="sm:max-w-md font-prompt">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                ยืนยันการลบผู้ใช้งาน
+              </DialogTitle>
+              <DialogDescription>
+                คุณต้องการลบผู้ใช้งาน <strong>{deletingUser?.username}</strong> ออกจากระบบใช่หรือไม่?
+                การกระทำนี้จะลบบัญชีและสิทธิ์การเข้าใช้งานของผู้ใช้นี้ทันที
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="mt-4 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteConfirmOpen(false)}
+                disabled={deletingLoading}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleConfirmDeleteUser}
+                disabled={deletingLoading}
+                className="gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                {deletingLoading ? "กำลังลบ..." : "ยืนยันการลบ"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   )

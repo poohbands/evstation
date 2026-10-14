@@ -84,10 +84,68 @@ export function createUser(data: {
   return { success: true, user: safeUser }
 }
 
-export function deleteUser(id: string): boolean {
-  if (id === "user-admin") return false // Cannot delete root admin
+export function updateUser(
+  id: string,
+  data: {
+    username?: string
+    password?: string
+    name?: string
+    role?: UserRole
+  }
+): { success: boolean; user?: User; error?: string } {
   const users = getUsers()
+  const idx = users.findIndex(u => u.id === id)
+  if (idx === -1) {
+    return { success: false, error: "ไม่พบผู้ใช้งานที่ต้องการแก้ไข" }
+  }
+
+  const existing = users[idx]
+
+  // If changing username, check if duplicate
+  if (data.username && data.username.toLowerCase().trim() !== existing.username.toLowerCase()) {
+    const dup = users.find(
+      u => u.id !== id && u.username.toLowerCase() === data.username!.toLowerCase().trim()
+    )
+    if (dup) {
+      return { success: false, error: "ชื่อผู้ใช้นี้มีในระบบแล้ว" }
+    }
+    existing.username = data.username.toLowerCase().trim()
+  }
+
+  if (data.name) {
+    existing.name = data.name.trim()
+  }
+
+  if (data.role) {
+    existing.role = data.role
+  }
+
+  if (data.password && data.password.trim() !== "") {
+    existing.passwordHash = data.password.trim()
+  }
+
+  users[idx] = existing
+  globalForAuth.storedUsers = users
+
+  const { passwordHash, ...safeUser } = existing
+  return { success: true, user: safeUser }
+}
+
+export function deleteUser(id: string): { success: boolean; error?: string } {
+  const users = getUsers()
+  const target = users.find(u => u.id === id)
+  if (!target) {
+    return { success: false, error: "ไม่พบผู้ใช้ที่ต้องการลบ" }
+  }
+
+  // Check if target is the last admin
+  const adminCount = users.filter(u => u.role === "ADMIN").length
+  if (target.role === "ADMIN" && adminCount <= 1) {
+    return { success: false, error: "ไม่สามารถลบผู้ดูแลระบบคนสุดท้ายได้ ต้องมี Admin อย่างน้อย 1 บัญชี" }
+  }
+
   const before = users.length
   globalForAuth.storedUsers = users.filter(u => u.id !== id)
-  return globalForAuth.storedUsers.length < before
+  return { success: globalForAuth.storedUsers.length < before }
 }
+
