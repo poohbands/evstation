@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = validateCredentials(username, password)
+    const result = await validateCredentials(username, password)
     if (!result.user) {
       return NextResponse.json(
         { error: result.error || "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" },

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getUsers, createUser, updateUser, deleteUser } from "@/lib/auth"
+import {
+  getUsersAsync,
+  createUserAsync,
+  updateUserAsync,
+  deleteUserAsync,
+} from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    const users = getUsers().map(({ passwordHash, ...safeUser }) => safeUser)
+    const users = await getUsersAsync()
     return NextResponse.json(users)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -24,7 +29,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = createUser({ username, password, name, role })
+    const result = await createUserAsync({ username, password, name, role })
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
@@ -44,7 +49,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "ไม่พบรหัสผู้ใช้ที่ต้องการแก้ไข" }, { status: 400 })
     }
 
-    const result = updateUser(id, { username, password, name, role, isActive })
+    const result = await updateUserAsync(id, { username, password, name, role, isActive })
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
@@ -63,7 +68,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "ไม่พบรหัสผู้ใช้" }, { status: 400 })
     }
 
-    const result = deleteUser(id)
+    const result = await deleteUserAsync(id)
     if (!result.success) {
       return NextResponse.json({ error: result.error || "ไม่สามารถลบผู้ใช้นี้ได้" }, { status: 400 })
     }
@@ -73,4 +78,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
-
