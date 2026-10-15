@@ -9,61 +9,83 @@ datasource db {
 }
 
 model OrganizationSettings {
-  id                    String   @id @default(cuid())
-  companyName           String   @default("")
-  address               String   @default("")
-  taxId                 String   @default("")
-  phone                 String   @default("")
-  email                 String   @default("")
-  bankName              String   @default("")
-  bankAccountNo         String   @default("")
-  bankAccountName       String   @default("")
-  signerName            String   @default("")
-  signerTitle           String   @default("")
-  logoUrl               String   @default("")
-  defaultCustomerName   String   @default("")
-  defaultCustomerAddress String  @default("")
-  defaultCustomerTaxId  String   @default("")
-  defaultCustomerBranch String   @default("")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  companyName            String   @default("")
+  address                String   @default("")
+  taxId                  String   @default("")
+  phone                  String   @default("")
+  email                  String   @default("")
+  bankName               String   @default("")
+  bankAccountNo          String   @default("")
+  bankAccountName        String   @default("")
+  bankBranch             String?  @default("")
+  bankAccountType        String?  @default("SAVINGS")
+  contactPerson          String?  @default("")
+  contactPhone           String?  @default("")
+  signerName             String   @default("")
+  signerTitle            String   @default("")
+  logoUrl                String   @default("")
+  defaultCustomerName    String   @default("")
+  defaultCustomerAddress String   @default("")
+  defaultCustomerTaxId   String   @default("")
+  defaultCustomerBranch  String   @default("")
+  isVatRegistered        Boolean  @default(true)
+  branchNumber           String   @default("สำนักงานใหญ่")
+  isMaintenanceMode      Boolean  @default(false)
+  maintenanceMessage     String   @default("ระบบกำลังปิดปรับปรุงชั่วคราวเพื่ออัปเกรดระบบและเพิ่มประสิทธิภาพ กรุณากลับมาใหม่อีกครั้งในภายหลัง")
+  maintenanceUntil       String   @default("เร็วๆ นี้")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model Document {
-  id              String         @id @default(cuid())
-  docNumber       String         @unique
-  docType         String         // INV_ELEC, REC_ELEC, INV_RENT, REC_RENT
-  refInvoiceId    String?        // reference to parent invoice when this is a receipt
-  issueDate       DateTime
-  dueDate         DateTime?
-  billingMonth    Int
-  billingYear     Int
-  stationName     String         @default("")
-  customerName    String         @default("")
-  customerAddress String         @default("")
-  customerTaxId   String         @default("")
-  customerBranch  String         @default("")
-  contractRef     String         @default("")
-  subtotal        Float          @default(0)
-  vatRate         Float          @default(7)
-  vatAmount       Float          @default(0)
-  whtRate         Float          @default(3)
-  whtAmount       Float          @default(0)
-  grandTotal      Float          @default(0)
-  netPayable      Float          @default(0)
-  enableVat       Boolean        @default(true)
-  enableWht       Boolean        @default(true)
-  status          String         @default("PENDING") // PENDING, PAID, CANCELLED
-  paymentDate     DateTime?
-  paymentMethod   String?        // TRANSFER, CHEQUE, CASH
-  paymentRef      String?
-  notes           String         @default("")
-  thaiBahtText    String         @default("")
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  items           DocumentItem[]
-  refInvoice      Document?      @relation("InvoiceReceipts", fields: [refInvoiceId], references: [id])
-  receipts        Document[]     @relation("InvoiceReceipts")
+  id                  String         @id @default(cuid())
+  docNumber           String         @unique
+  docType             String         // INV_ELEC, REC_ELEC, INV_RENT, REC_RENT
+  refInvoiceId        String?        // reference to parent invoice when this is a receipt
+  issueDate           DateTime
+  dueDate             DateTime?
+  billingMonth        Int
+  billingYear         Int
+  stationName         String         @default("")
+  customerName        String         @default("")
+  customerAddress     String         @default("")
+  customerTaxId       String         @default("")
+  customerBranch      String         @default("")
+  contractRef         String         @default("")
+  subtotal            Float          @default(0)
+  vatRate             Float          @default(7)
+  vatAmount           Float          @default(0)
+  whtRate             Float          @default(3)
+  whtAmount           Float          @default(0)
+  grandTotal          Float          @default(0)
+  netPayable          Float          @default(0)
+  enableVat           Boolean        @default(true)
+  enableWht           Boolean        @default(true)
+  status              String         @default("PENDING") // PENDING, PAID, CANCELLED
+  paymentDate         DateTime?
+  paymentMethod       String?        // TRANSFER, CHEQUE, CASH
+  paymentRef          String?
+  notes               String         @default("")
+  thaiBahtText        String         @default("")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  items               DocumentItem[]
+  refInvoice          Document?      @relation("InvoiceReceipts", fields: [refInvoiceId], references: [id])
+  receipts            Document[]     @relation("InvoiceReceipts")
+
+  // PEA VOLTA fields
+  isVatRegistered     Boolean?       @default(true)
+  branchNumber        String?        @default("สำนักงานใหญ่")
+  totalRawAmount      Float?
+  peaFeeAmount        Float?
+  totalClaim95        Float?
+  payoutStatus        String?        @default("WAITING_SEND")
+  payoutType          String?        @default("REGULAR")
+  trackingNumber      String?
+  shippingDate        DateTime?
+  peaReceivedDate     DateTime?
+  estimatedPayoutDate DateTime?
 }
 
 model DocumentItem {
@@ -89,4 +111,23 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model PeaMonthlyFee {
+  id           String    @id @default(cuid())
+  billingMonth Int
+  billingYear  Int
+  stationName  String    @default("")
+  ref1Contract String    @default("")
+  ref2Invoice  String    @default("")
+  feeAmount    Float     @default(0)
+  vatAmount    Float     @default(0)
+  totalAmount  Float     @default(0)
+  status       String    @default("PENDING") // PENDING, PAID
+  channel      String?   // COUNTER_SERVICE, SMART_PLUS
+  paidDate     DateTime?
+  receiptImage String?
+  notes        String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }

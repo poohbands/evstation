@@ -181,7 +181,7 @@ export async function createNewDocument(body: any) {
 
       const month = parseInt(billingMonth, 10)
       const year = parseInt(billingYear, 10)
-      const docNumber = await generateDocNumber(docType, month, year)
+      const docNumber = body.docNumber || (await generateDocNumber(docType, month, year))
       const effectiveWhtRate = whtRate !== undefined ? Number(whtRate) : getDefaultWhtRate(docType)
       const totals = calculateAllTotals(items, enableVat, Number(vatRate), enableWht, effectiveWhtRate)
       const thaiBaht = ThaiBahtText(totals.netPayable)
@@ -210,6 +210,17 @@ export async function createNewDocument(body: any) {
           paymentRef: paymentRef || null,
           notes: notes || "",
           thaiBahtText: thaiBaht,
+          isVatRegistered: body.isVatRegistered !== undefined ? body.isVatRegistered : true,
+          branchNumber: body.branchNumber || "สำนักงานใหญ่",
+          totalRawAmount: body.totalRawAmount != null ? Number(body.totalRawAmount) : null,
+          peaFeeAmount: body.peaFeeAmount != null ? Number(body.peaFeeAmount) : null,
+          totalClaim95: body.totalClaim95 != null ? Number(body.totalClaim95) : null,
+          payoutStatus: body.payoutStatus || "WAITING_SEND",
+          payoutType: body.payoutType || "REGULAR",
+          trackingNumber: body.trackingNumber || null,
+          shippingDate: body.shippingDate ? new Date(body.shippingDate) : null,
+          peaReceivedDate: body.peaReceivedDate ? new Date(body.peaReceivedDate) : null,
+          estimatedPayoutDate: body.estimatedPayoutDate ? new Date(body.estimatedPayoutDate) : null,
           items: {
             create: items.map((it: any, index: number) => ({
               itemOrder: it.itemOrder || index + 1,
@@ -542,21 +553,112 @@ export async function seedDatabase() {
 }
 
 export async function createPairedDocuments(data: any) {
+  if (isRemoteDatabaseConfigured()) {
+    try {
+      const isRent = Boolean(data.docType && data.docType.includes("RENT"))
+      const invType = isRent ? "INV_RENT" : "INV_ELEC"
+      const recType = isRent ? "REC_RENT" : "REC_ELEC"
+
+      // 1. Create Invoice
+      const invoiceData = {
+        ...data,
+        docType: invType,
+        status: "PENDING",
+      }
+      const invoice = await createNewDocument(invoiceData)
+
+      // 2. Create Paired Receipt
+      const invDate = new Date(invoice.issueDate)
+      let recDate = new Date(invDate.getTime() + 86400000)
+      if (data.receiptDate) {
+        const specified = new Date(data.receiptDate)
+        if (specified >= invDate) {
+          recDate = specified
+        }
+      }
+
+      const receiptData = {
+        ...data,
+        docType: recType,
+        refInvoiceId: invoice.id,
+        issueDate: recDate.toISOString(),
+        dueDate: null,
+        status: "PENDING",
+        paymentMethod: "TRANSFER",
+        notes: `ออกคู่กับใบแจ้งหนี้ ${invoice.docNumber} เพื่อนำส่ง กฟภ.`,
+      }
+      const receipt = await createNewDocument(receiptData)
+
+      return { invoice, receipt }
+    } catch (err) {
+      console.warn("Prisma createPairedDocuments failed, using mock fallback:", err)
+    }
+  }
+
   const { createMockPairedDocuments } = await import("@/lib/mock-store")
   return createMockPairedDocuments(data)
 }
 
 export async function getMonthlyFeesList() {
+  if (isRemoteDatabaseConfigured()) {
+    try {
+      return await prisma.peaMonthlyFee.findMany({
+        orderBy: [{ billingYear: "desc" }, { billingMonth: "desc" }],
+      })
+    } catch (err) {
+      console.warn("Prisma getMonthlyFeesList failed, using mock fallback:", err)
+    }
+  }
+
   const { getMockMonthlyFees } = await import("@/lib/mock-store")
   return getMockMonthlyFees()
 }
 
 export async function createNewMonthlyFee(data: any) {
+  if (isRemoteDatabaseConfigured()) {
+    try {
+      const month = parseInt(data.billingMonth, 10)
+      const year = parseInt(data.billingYear, 10)
+      const feeAmount = parseFloat(data.feeAmount) || 0
+      const vatAmount = Math.round(feeAmount * 0.07 * 100) / 100
+      const totalAmount = Math.round((feeAmount + vatAmount) * 100) / 100
+
+      return await prisma.peaMonthlyFee.create({
+        data: {
+          billingMonth: month,
+          billingYear: year,
+          stationName: data.stationName || "สถานีชาร์จ กรีนชาร์จ คลองหลวง",
+          ref1Contract: data.ref1Contract || "",
+          ref2Invoice: data.ref2Invoice || "",
+          feeAmount,
+          vatAmount,
+          totalAmount,
+          status: data.status || "PENDING",
+          channel: data.channel || null,
+          paidDate: data.paidDate ? new Date(data.paidDate) : null,
+          receiptImage: data.receiptImage || null,
+          notes: data.notes || "",
+        },
+      })
+    } catch (err) {
+      console.warn("Prisma createNewMonthlyFee failed, using mock fallback:", err)
+    }
+  }
+
   const { createMockMonthlyFee } = await import("@/lib/mock-store")
   return createMockMonthlyFee(data)
 }
 
 export async function deleteMonthlyFeeById(id: string) {
+  if (isRemoteDatabaseConfigured()) {
+    try {
+      await prisma.peaMonthlyFee.delete({ where: { id } })
+      return true
+    } catch (err) {
+      console.warn("Prisma deleteMonthlyFeeById failed, using mock fallback:", err)
+    }
+  }
+
   const { deleteMockMonthlyFee } = await import("@/lib/mock-store")
   return deleteMockMonthlyFee(id)
 }
