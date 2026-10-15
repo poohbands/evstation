@@ -580,6 +580,49 @@ export function updateMockSettings(data: Partial<MockSettings>): MockSettings {
   return store.settings
 }
 
+export function ensurePairedInvoicesExist(documents: MockDocument[]): MockDocument[] {
+  const missingInvoices: MockDocument[] = []
+  for (const doc of documents) {
+    if (doc.docType === "REC_ELEC" || doc.docType === "REC_RENT") {
+      const isElec = doc.docType === "REC_ELEC"
+      const targetPrefix = isElec ? "INV-EV-" : "INV-RENT-"
+      const recPrefix = isElec ? "REC-EV-" : "REC-RENT-"
+      if (doc.docNumber && doc.docNumber.startsWith(recPrefix)) {
+        const invDocNumber = doc.docNumber.replace(recPrefix, targetPrefix)
+        const hasMatching = documents.some(d => d.docNumber === invDocNumber)
+        if (!hasMatching) {
+          const invId = `doc-inv-${doc.id.replace(/^doc-(rec-)?/, "")}`
+          const recDate = new Date(doc.issueDate)
+          const invDate = new Date(recDate.getTime() - 86400000)
+          const newInv: MockDocument = {
+            ...doc,
+            id: invId,
+            docNumber: invDocNumber,
+            docType: isElec ? "INV_ELEC" : "INV_RENT",
+            refInvoiceId: null,
+            issueDate: invDate.toISOString(),
+            dueDate: new Date(invDate.getTime() + 30 * 86400000).toISOString(),
+            status: "PENDING",
+            notes: `ใบแจ้งหนี้ (ออกคู่กับ ${doc.docNumber})`,
+            createdAt: doc.createdAt ? new Date(new Date(doc.createdAt).getTime() - 1000).toISOString() : new Date().toISOString(),
+            items: (doc.items || []).map((it, idx) => ({
+              ...it,
+              id: `it-${invId}-${idx}`,
+              documentId: invId,
+            })),
+          }
+          missingInvoices.push(newInv)
+          doc.refInvoiceId = invId
+        }
+      }
+    }
+  }
+  if (missingInvoices.length > 0) {
+    documents.unshift(...missingInvoices)
+  }
+  return documents
+}
+
 export function getMockDocuments(filters?: {
   type?: string | null
   status?: string | null
@@ -588,6 +631,7 @@ export function getMockDocuments(filters?: {
   search?: string | null
 }): MockDocument[] {
   const store = getStore()
+  ensurePairedInvoicesExist(store.documents)
   let list = [...store.documents]
 
   if (filters?.type) {
@@ -661,7 +705,8 @@ export function generateMockDocNumber(docType: string, month: number, year: numb
 
 export function createMockDocument(data: any): MockDocument {
   const store = getStore()
-  const id = data.id || `doc-${Date.now()}`
+  const randomSuffix = Math.random().toString(36).substring(2, 8)
+  const id = data.id || `doc-${Date.now()}-${randomSuffix}`
   const month = parseInt(data.billingMonth || "10", 10)
   const year = parseInt(data.billingYear || "2026", 10)
   const docType = data.docType || "INV_ELEC"
@@ -669,7 +714,7 @@ export function createMockDocument(data: any): MockDocument {
   const docNumber = data.docNumber || generateMockDocNumber(docType, month, year)
 
   const items: MockItem[] = (data.items || []).map((it: any, idx: number) => ({
-    id: `it-${Date.now()}-${idx}`,
+    id: `it-${Date.now()}-${idx}-${randomSuffix}`,
     documentId: id,
     itemOrder: it.itemOrder || idx + 1,
     description: it.description || "",
@@ -743,15 +788,21 @@ export function createMockDocument(data: any): MockDocument {
  * Generate paired PEA Invoice + Receipt simultaneously
  */
 export function createMockPairedDocuments(data: any): { invoice: MockDocument; receipt: MockDocument } {
-  // 1. Create Invoice
+  const isRent = Boolean(data.docType && data.docType.includes("RENT"))
+  const invType = isRent ? "INV_RENT" : "INV_ELEC"
+  const recType = isRent ? "REC_RENT" : "REC_ELEC"
+
+  // 1. Create Invoice with explicitly unique ID
+  const invoiceId = data.invoiceId || `doc-inv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
   const invoiceData = {
     ...data,
-    docType: data.docType.includes("RENT") ? "INV_RENT" : "INV_ELEC",
+    id: invoiceId,
+    docType: invType,
     status: "PENDING",
   }
   const invoice = createMockDocument(invoiceData)
 
-  // 2. Create Paired Receipt with receipt date = invoice date + 1 day or specified receiptDate
+  // 2. Create Paired Receipt with explicitly unique ID and receipt date = invoice date + 1 day or specified receiptDate
   const invDate = new Date(invoice.issueDate)
   let recDate = new Date(invDate.getTime() + 86400000) // Next day
   if (data.receiptDate) {
@@ -761,9 +812,11 @@ export function createMockPairedDocuments(data: any): { invoice: MockDocument; r
     }
   }
 
+  const receiptId = data.receiptId || `doc-rec-${Date.now() + 10}-${Math.random().toString(36).substring(2, 7)}`
   const receiptData = {
     ...data,
-    docType: data.docType.includes("RENT") ? "REC_RENT" : "REC_ELEC",
+    id: receiptId,
+    docType: recType,
     refInvoiceId: invoice.id,
     issueDate: recDate.toISOString(),
     dueDate: null,

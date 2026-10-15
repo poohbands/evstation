@@ -343,12 +343,19 @@ function CreateDocumentForm() {
         totalClaim95: peaCalc.totalClaim95,
       }
 
-      if (isPairedMode && (docType === "INV_ELEC" || docType === "INV_RENT")) {
-        // Paired Creation
+      const isElectricity = docType === "INV_ELEC" || docType === "REC_ELEC"
+      const isRental = docType === "INV_RENT" || docType === "REC_RENT"
+
+      if (isPairedMode && (isElectricity || isRental)) {
+        // Paired Creation: Always create paired Invoice + Receipt
+        const pairedPayload = {
+          ...payload,
+          docType: isRental ? "INV_RENT" : "INV_ELEC",
+        }
         const res = await fetch("/api/documents/paired", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(pairedPayload),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "ไม่สามารถออกคู่เอกสารได้")

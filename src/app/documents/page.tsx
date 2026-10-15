@@ -159,7 +159,7 @@ export default function DocumentsPage() {
       const localDocs = getLocalDocuments()
       const merged = [...serverDocs]
       for (const ld of localDocs) {
-        if (merged.some(d => d.id === ld.id)) continue
+        if (merged.some(d => d.id === ld.id || (ld.docNumber && d.docNumber === ld.docNumber))) continue
         // Apply same filters as the server query
         if (typeFilter && typeFilter !== "ALL" && ld.docType !== typeFilter) continue
         if (statusFilter && statusFilter !== "ALL" && ld.status !== statusFilter) continue
