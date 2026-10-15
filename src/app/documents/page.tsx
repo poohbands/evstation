@@ -20,6 +20,9 @@ import {
   Calendar,
   AlertTriangle,
   RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -73,6 +76,35 @@ import {
 import { getLocalDocuments, removeLocalDocument } from "@/lib/client-storage"
 import type { DocumentWithItems } from "@/types"
 
+function sortDocumentsList(docs: DocumentWithItems[], sortKey: string): DocumentWithItems[] {
+  return [...docs].sort((a, b) => {
+    switch (sortKey) {
+      case "createdAt_asc":
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      case "createdAt_desc":
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      case "issueDate_desc":
+        return new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
+      case "issueDate_asc":
+        return new Date(a.issueDate).getTime() - new Date(b.issueDate).getTime()
+      case "docNumber_desc":
+        return (b.docNumber || "").localeCompare(a.docNumber || "", undefined, { numeric: true })
+      case "docNumber_asc":
+        return (a.docNumber || "").localeCompare(b.docNumber || "", undefined, { numeric: true })
+      case "netPayable_desc":
+        return (b.netPayable || 0) - (a.netPayable || 0)
+      case "netPayable_asc":
+        return (a.netPayable || 0) - (b.netPayable || 0)
+      case "customer_asc":
+        return (a.stationName || a.customerName || "").localeCompare(b.stationName || b.customerName || "", "th")
+      case "customer_desc":
+        return (b.stationName || b.customerName || "").localeCompare(a.stationName || a.customerName || "", "th")
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    }
+  })
+}
+
 export default function DocumentsPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -86,6 +118,17 @@ export default function DocumentsPage() {
   const [statusFilter, setStatusFilter] = React.useState("ALL")
   const [monthFilter, setMonthFilter] = React.useState("ALL")
   const [yearFilter, setYearFilter] = React.useState("ALL")
+
+  // Sorting state
+  const [sortBy, setSortBy] = React.useState("createdAt_desc")
+  const sortByRef = React.useRef(sortBy)
+  sortByRef.current = sortBy
+
+  const handleSortChange = React.useCallback((newSort: string) => {
+    setSortBy(newSort)
+    sortByRef.current = newSort
+    setDocuments((prev) => sortDocumentsList(prev, newSort))
+  }, [])
 
   // Delete modal confirmation
   const [deleteId, setDeleteId] = React.useState<string | null>(null)
@@ -139,10 +182,9 @@ export default function DocumentsPage() {
         }).catch(() => {})
       }
 
-      // Sort by newest first so recently created documents always appear at the top
-      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-      setDocuments(merged)
+      // Sort according to current sort criteria
+      const sorted = sortDocumentsList(merged, sortByRef.current)
+      setDocuments(sorted)
     } catch (err: any) {
       console.error(err)
       let localDocs = getLocalDocuments()
@@ -159,9 +201,9 @@ export default function DocumentsPage() {
           (d.stationName || "").toLowerCase().includes(q)
         )
       }
-      localDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      if (localDocs.length > 0) {
-        setDocuments(localDocs)
+      const sorted = sortDocumentsList(localDocs, sortByRef.current)
+      if (sorted.length > 0) {
+        setDocuments(sorted)
       } else {
         toast({
           title: "เกิดข้อผิดพลาด",
@@ -191,6 +233,7 @@ export default function DocumentsPage() {
     setStatusFilter("ALL")
     setMonthFilter("ALL")
     setYearFilter("ALL")
+    handleSortChange("createdAt_desc")
   }
 
   // Handle Duplicate
@@ -434,29 +477,61 @@ export default function DocumentsPage() {
                 </div>
               </div>
 
-              {/* Sub Row: Year and Reset */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-slate-500">ปี พ.ศ./ค.ศ.:</span>
-                  <div className="w-36">
-                    <Select value={yearFilter} onValueChange={setYearFilter}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="ทุกปี" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">ทุกปี</SelectItem>
-                        {years.map((y) => (
-                          <SelectItem key={y} value={String(y)}>
-                            {y + 543} ({y})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {/* Sub Row: Year, Sorting, and Reset */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                  {/* Year Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 whitespace-nowrap">ปี พ.ศ./ค.ศ.:</span>
+                    <div className="w-32">
+                      <Select value={yearFilter} onValueChange={setYearFilter}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="ทุกปี" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">ทุกปี</SelectItem>
+                          {years.map((y) => (
+                            <SelectItem key={y} value={String(y)}>
+                              {y + 543} ({y})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+
+                  {/* Sort Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-xs font-medium text-slate-500 whitespace-nowrap">
+                      <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+                      เรียงเอกสาร:
+                    </span>
+                    <div className="w-56 sm:w-64">
+                      <Select value={sortBy} onValueChange={handleSortChange}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="เรียงลำดับเอกสาร" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="createdAt_desc">สร้างล่าสุด (ใหม่ → เก่า)</SelectItem>
+                          <SelectItem value="createdAt_asc">สร้างก่อนหน้า (เก่า → ใหม่)</SelectItem>
+                          <SelectItem value="issueDate_desc">วันที่เอกสาร (ล่าสุด → เก่าสุด)</SelectItem>
+                          <SelectItem value="issueDate_asc">วันที่เอกสาร (เก่าสุด → ล่าสุด)</SelectItem>
+                          <SelectItem value="docNumber_desc">เลขที่เอกสาร (มาก → น้อย)</SelectItem>
+                          <SelectItem value="docNumber_asc">เลขที่เอกสาร (น้อย → มาก)</SelectItem>
+                          <SelectItem value="netPayable_desc">ยอดเงินสุทธิ (มาก → น้อย)</SelectItem>
+                          <SelectItem value="netPayable_asc">ยอดเงินสุทธิ (น้อย → มาก)</SelectItem>
+                          <SelectItem value="customer_asc">ชื่อสถานี/ลูกค้า (ก → ฮ)</SelectItem>
+                          <SelectItem value="customer_desc">ชื่อสถานี/ลูกค้า (ฮ → ก)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {(searchTerm || typeFilter !== "ALL" || statusFilter !== "ALL" || monthFilter !== "ALL" || yearFilter !== "ALL") && (
+                  {(searchTerm || typeFilter !== "ALL" || statusFilter !== "ALL" || monthFilter !== "ALL" || yearFilter !== "ALL" || sortBy !== "createdAt_desc") && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -505,11 +580,56 @@ export default function DocumentsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/75">
-                      <TableHead className="font-semibold text-slate-700">เลขที่เอกสาร</TableHead>
+                      <TableHead
+                        className="cursor-pointer font-semibold text-slate-700 hover:text-blue-600 select-none transition-colors"
+                        onClick={() => handleSortChange(sortBy === "docNumber_desc" ? "docNumber_asc" : "docNumber_desc")}
+                        title="คลิกเพื่อเรียงตามเลขที่เอกสาร"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>เลขที่เอกสาร</span>
+                          {sortBy === "docNumber_desc" ? (
+                            <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
+                          ) : sortBy === "docNumber_asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead className="font-semibold text-slate-700">ประเภทเอกสาร</TableHead>
-                      <TableHead className="font-semibold text-slate-700">สถานี / ลูกค้า</TableHead>
+                      <TableHead
+                        className="cursor-pointer font-semibold text-slate-700 hover:text-blue-600 select-none transition-colors"
+                        onClick={() => handleSortChange(sortBy === "customer_asc" ? "customer_desc" : "customer_asc")}
+                        title="คลิกเพื่อเรียงตามชื่อสถานี/ลูกค้า"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>สถานี / ลูกค้า</span>
+                          {sortBy === "customer_asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+                          ) : sortBy === "customer_desc" ? (
+                            <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead className="font-semibold text-slate-700">ประจำเดือน</TableHead>
-                      <TableHead className="text-right font-semibold text-slate-700">ยอดสุทธิ</TableHead>
+                      <TableHead
+                        className="cursor-pointer text-right font-semibold text-slate-700 hover:text-blue-600 select-none transition-colors"
+                        onClick={() => handleSortChange(sortBy === "netPayable_desc" ? "netPayable_asc" : "netPayable_desc")}
+                        title="คลิกเพื่อเรียงตามยอดสุทธิ"
+                      >
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>ยอดสุทธิ</span>
+                          {sortBy === "netPayable_desc" ? (
+                            <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
+                          ) : sortBy === "netPayable_asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 text-slate-300 hover:text-slate-500" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead className="text-center font-semibold text-slate-700">สถานะ</TableHead>
                       <TableHead className="text-right font-semibold text-slate-700">การดำเนินการ</TableHead>
                     </TableRow>
