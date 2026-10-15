@@ -112,24 +112,54 @@ export default function DocumentsPage() {
       const serverDocs: DocumentWithItems[] = Array.isArray(data) ? data : []
 
       // Merge client local documents (prevents disappearing on serverless cold starts)
+      // Apply the same filters to local docs so wrong doc types don't leak through
       const localDocs = getLocalDocuments()
       const merged = [...serverDocs]
       for (const ld of localDocs) {
-        if (!merged.some(d => d.id === ld.id)) {
-          merged.unshift(ld)
-          // Re-sync to server in background
-          fetch("/api/documents", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(ld),
-          }).catch(() => {})
+        if (merged.some(d => d.id === ld.id)) continue
+        // Apply same filters as the server query
+        if (typeFilter && typeFilter !== "ALL" && ld.docType !== typeFilter) continue
+        if (statusFilter && statusFilter !== "ALL" && ld.status !== statusFilter) continue
+        if (monthFilter && monthFilter !== "ALL" && ld.billingMonth !== parseInt(monthFilter)) continue
+        if (yearFilter && yearFilter !== "ALL" && ld.billingYear !== parseInt(yearFilter)) continue
+        if (searchTerm.trim()) {
+          const q = searchTerm.trim().toLowerCase()
+          const match =
+            (ld.docNumber || "").toLowerCase().includes(q) ||
+            (ld.customerName || "").toLowerCase().includes(q) ||
+            (ld.stationName || "").toLowerCase().includes(q)
+          if (!match) continue
         }
+        merged.push(ld)
+        // Re-sync to server in background
+        fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ld),
+        }).catch(() => {})
       }
+
+      // Sort by newest first so recently created documents always appear at the top
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
       setDocuments(merged)
     } catch (err: any) {
       console.error(err)
-      const localDocs = getLocalDocuments()
+      let localDocs = getLocalDocuments()
+      // Apply same filters to local-only fallback
+      if (typeFilter && typeFilter !== "ALL") localDocs = localDocs.filter(d => d.docType === typeFilter)
+      if (statusFilter && statusFilter !== "ALL") localDocs = localDocs.filter(d => d.status === statusFilter)
+      if (monthFilter && monthFilter !== "ALL") localDocs = localDocs.filter(d => d.billingMonth === parseInt(monthFilter))
+      if (yearFilter && yearFilter !== "ALL") localDocs = localDocs.filter(d => d.billingYear === parseInt(yearFilter))
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase()
+        localDocs = localDocs.filter(d =>
+          (d.docNumber || "").toLowerCase().includes(q) ||
+          (d.customerName || "").toLowerCase().includes(q) ||
+          (d.stationName || "").toLowerCase().includes(q)
+        )
+      }
+      localDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       if (localDocs.length > 0) {
         setDocuments(localDocs)
       } else {
