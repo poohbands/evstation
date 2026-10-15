@@ -29,6 +29,46 @@ async function main() {
   await prisma.documentItem.deleteMany({})
   await prisma.document.deleteMany({})
   await prisma.organizationSettings.deleteMany({})
+  await prisma.user.deleteMany({})
+
+  // 1.1 Create default users
+  await prisma.user.createMany({
+    data: [
+      {
+        id: "user-admin",
+        username: "admin",
+        passwordHash: "sakura4923",
+        name: "ผู้ดูแลระบบ (Admin)",
+        role: "ADMIN",
+        isActive: true,
+      },
+      {
+        id: "user-nukai",
+        username: "nukai",
+        passwordHash: "nukai12345",
+        name: "Nukai (ผู้ดูแลระบบ)",
+        role: "ADMIN",
+        isActive: true,
+      },
+      {
+        id: "user-accountant",
+        username: "accountant",
+        passwordHash: "sakura4923",
+        name: "เจ้าหน้าที่การเงินและบัญชี",
+        role: "ACCOUNTANT",
+        isActive: true,
+      },
+      {
+        id: "user-viewer",
+        username: "viewer",
+        passwordHash: "sakura4923",
+        name: "ผู้ตรวจสอบข้อมูล (Viewer)",
+        role: "VIEWER",
+        isActive: true,
+      },
+    ],
+  })
+  console.log("✅ Default users seeded")
 
   // 2. Create Organization Settings
   const settings = await prisma.organizationSettings.create({
