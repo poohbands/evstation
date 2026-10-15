@@ -5,6 +5,7 @@ import {
   updateUserAsync,
   deleteUserAsync,
 } from "@/lib/auth"
+import { logActivity, getUserFromRequest, getClientInfo } from "@/lib/audit-logger"
 
 export const dynamic = "force-dynamic"
 
@@ -18,6 +19,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const actor = getUserFromRequest(request)
+  const client = getClientInfo(request)
+
   try {
     const body = await request.json()
     const { username, password, name, role } = body
@@ -34,6 +38,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
+    await logActivity({
+      userId: actor.id,
+      username: actor.username,
+      userRole: actor.role,
+      action: "CREATE_USER",
+      category: "USER",
+      description: `สร้างผู้ใช้งานใหม่: ${username} (${name}) สิทธิ์: ${role}`,
+      targetId: result.user?.id,
+      targetName: username,
+      ipAddress: client.ipAddress,
+      userAgent: client.userAgent,
+      details: { username, name, role },
+    })
+
     return NextResponse.json(result.user, { status: 201 })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -41,6 +59,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const actor = getUserFromRequest(request)
+  const client = getClientInfo(request)
+
   try {
     const body = await request.json()
     const { id, username, password, name, role, isActive } = body
@@ -54,6 +75,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
+    const changes: string[] = []
+    if (password) changes.push("เปลี่ยนรหัสผ่าน")
+    if (name) changes.push(`ชื่อ: ${name}`)
+    if (role) changes.push(`สิทธิ์: ${role}`)
+    if (isActive !== undefined) changes.push(isActive ? "เปิดใช้งาน" : "ปิดใช้งาน")
+
+    await logActivity({
+      userId: actor.id,
+      username: actor.username,
+      userRole: actor.role,
+      action: "UPDATE_USER",
+      category: "USER",
+      description: `แก้ไขผู้ใช้งาน: ${result.user?.username || id} (${changes.join(", ") || "อัปเดตข้อมูล"})`,
+      targetId: id,
+      targetName: result.user?.username || id,
+      ipAddress: client.ipAddress,
+      userAgent: client.userAgent,
+      details: { username, name, role, isActive, passwordChanged: !!password },
+    })
+
     return NextResponse.json(result.user)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -61,6 +102,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const actor = getUserFromRequest(request)
+  const client = getClientInfo(request)
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -72,6 +116,19 @@ export async function DELETE(request: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ error: result.error || "ไม่สามารถลบผู้ใช้นี้ได้" }, { status: 400 })
     }
+
+    await logActivity({
+      userId: actor.id,
+      username: actor.username,
+      userRole: actor.role,
+      action: "DELETE_USER",
+      category: "USER",
+      description: `ลบผู้ใช้งานรหัส: ${id}`,
+      targetId: id,
+      targetName: id,
+      ipAddress: client.ipAddress,
+      userAgent: client.userAgent,
+    })
 
     return NextResponse.json({ success: true, message: "ลบผู้ใช้สำเร็จ" })
   } catch (error: any) {

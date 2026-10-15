@@ -48,12 +48,13 @@ export async function GET() {
     const latency = Date.now() - pingStart
 
     // Query record counts across key models
-    const [docCount, itemCount, userCount, settingsCount, monthlyFeeCount] = await Promise.all([
+    const [docCount, itemCount, userCount, settingsCount, monthlyFeeCount, auditLogCount] = await Promise.all([
       prisma.document.count(),
       prisma.documentItem.count(),
       prisma.user.count(),
       prisma.organizationSettings.count(),
       prisma.peaMonthlyFee.count(),
+      prisma.auditLog.count(),
     ])
 
     const serverTime = result[0]?.server_time || new Date().toISOString()
@@ -79,6 +80,7 @@ export async function GET() {
         users: userCount,
         settings: settingsCount,
         monthlyFees: monthlyFeeCount,
+        auditLogs: auditLogCount,
       },
       checkedAt: new Date().toISOString(),
     })

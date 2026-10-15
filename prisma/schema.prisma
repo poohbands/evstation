@@ -131,3 +131,24 @@ model PeaMonthlyFee {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  username    String   @default("anonymous")
+  userRole    String   @default("")
+  action      String   // LOGIN, LOGIN_FAILED, LOGOUT, CREATE_DOC, UPDATE_DOC, DELETE_DOC, UPDATE_SETTINGS, CREATE_USER, UPDATE_USER, DELETE_USER, UPDATE_FEE
+  category    String   // AUTH, DOCUMENT, USER, SETTINGS, MONTHLY_FEE, SYSTEM
+  description String   // Human-readable summary in Thai
+  targetId    String?  // e.g. documentId, userId
+  targetName  String?  // e.g. docNumber, target username
+  ipAddress   String?  // Client IP
+  userAgent   String?  // Client User Agent
+  details     String?  // Additional metadata as JSON
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([category])
+  @@index([action])
+  @@index([username])
+}

@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Wrench,
   Database,
+  History,
 } from "lucide-react"
 import { cn, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useAuth } from "@/components/auth/AuthContext"
@@ -75,6 +76,12 @@ const navItems: NavItem[] = [
     title: "สถานะฐานข้อมูล",
     href: "/database-status",
     icon: Database,
+    adminOnly: true,
+  },
+  {
+    title: "ประวัติการใช้งาน (Logs)",
+    href: "/logs",
+    icon: History,
     adminOnly: true,
   },
   {

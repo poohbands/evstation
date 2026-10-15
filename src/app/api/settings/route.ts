@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getOrganizationSettings, updateOrganizationSettings } from "@/lib/data-service"
+import { logActivity, getUserFromRequest, getClientInfo } from "@/lib/audit-logger"
 
 export const dynamic = "force-dynamic"
 
@@ -17,9 +18,35 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const actor = getUserFromRequest(request)
+  const client = getClientInfo(request)
+
   try {
     const body = await request.json()
     const updated = await updateOrganizationSettings(body)
+
+    const isMaintenance = body.isMaintenanceMode !== undefined
+    const desc = isMaintenance
+      ? `เปลี่ยนโหมดบำรุงรักษา (Maintenance Mode): ${body.isMaintenanceMode ? "เปิดใช้งาน" : "ปิดใช้งาน"}`
+      : `บันทึกข้อมูลองค์กรและค่าเริ่มต้น กฟภ. (${body.companyName || "การตั้งค่า"})`
+
+    await logActivity({
+      userId: actor.id,
+      username: actor.username,
+      userRole: actor.role,
+      action: isMaintenance ? "UPDATE_MAINTENANCE" : "UPDATE_SETTINGS",
+      category: "SETTINGS",
+      description: desc,
+      targetName: body.companyName,
+      ipAddress: client.ipAddress,
+      userAgent: client.userAgent,
+      details: {
+        companyName: body.companyName,
+        isMaintenanceMode: body.isMaintenanceMode,
+        taxId: body.taxId,
+      },
+    })
+
     return NextResponse.json(updated)
   } catch (error: any) {
     console.error("Error updating settings:", error)

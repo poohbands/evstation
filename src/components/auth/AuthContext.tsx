@@ -56,8 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    try {
+      fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "LOGOUT",
+          category: "AUTH",
+          description: `ออกจากระบบ (${user?.username || "ไม่ระบุ"})`,
+          username: user?.username,
+          userRole: user?.role,
+        }),
+      }).catch(() => {})
+    } catch {
+      // ignore
+    }
     setUser(null)
     localStorage.removeItem("ev_user")
+    document.cookie = "ev_user_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     window.location.href = "/login"
   }
 
