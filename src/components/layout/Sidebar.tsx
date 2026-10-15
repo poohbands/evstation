@@ -18,6 +18,7 @@ import {
   User as UserIcon,
   ExternalLink,
   Wrench,
+  Database,
 } from "lucide-react"
 import { cn, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useAuth } from "@/components/auth/AuthContext"
@@ -27,7 +28,14 @@ interface SidebarProps {
   onClose?: () => void
 }
 
-const navItems = [
+interface NavItem {
+  title: string
+  href: string
+  icon: any
+  adminOnly?: boolean
+}
+
+const navItems: NavItem[] = [
   {
     title: "แดชบอร์ด",
     href: "/",
@@ -64,6 +72,12 @@ const navItems = [
     icon: Wrench,
   },
   {
+    title: "สถานะฐานข้อมูล",
+    href: "/database-status",
+    icon: Database,
+    adminOnly: true,
+  },
+  {
     title: "ตั้งค่าองค์กร & สิทธิ์ผู้ใช้",
     href: "/settings",
     icon: Settings,
@@ -72,7 +86,7 @@ const navItems = [
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
 
   const isActive = (href: string) => {
     if (href === "/") {
@@ -136,8 +150,10 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             เมนูหลัก
           </div>
           <nav className="space-y-1.5">
-            {navItems.map((item) => {
-              const Icon = item.icon
+            {navItems
+              .filter((item) => !item.adminOnly || isAdmin)
+              .map((item) => {
+                const Icon = item.icon
               const active = isActive(item.href)
 
               return (
