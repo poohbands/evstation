@@ -152,3 +152,28 @@ model AuditLog {
   @@index([action])
   @@index([username])
 }
+
+model StationTransaction {
+  id              String   @id @default(cuid())
+  stationName     String   @default("สถานีชาร์จ พญาเสืออีวี")
+  chargerDevice   String   @default("สถานีชาร์จ พญาเสืออีวี")
+  connector       String   // CCS2-1, CCS2-2
+  vcard           String   @default("")
+  date            String   // YYYY-MM-DD or DD/MM/YYYY
+  dateIso         String   // YYYY-MM-DD
+  startTime       String
+  stopTime        String
+  duration        String
+  durationSeconds Int      @default(0)
+  durationMinutes Float    @default(0)
+  kwh             Float    @default(0)
+  revenue         Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([startTime, vcard, connector])
+  @@index([dateIso])
+  @@index([stationName])
+  @@index([connector])
+}
+
