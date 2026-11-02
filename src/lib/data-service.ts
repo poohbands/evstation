@@ -134,8 +134,10 @@ export async function getDocumentsList(filters: {
 export async function getDocumentById(id: string) {
   if (isRemoteDatabaseConfigured()) {
     try {
-      const doc = await prisma.document.findUnique({
-        where: { id },
+      const doc = await prisma.document.findFirst({
+        where: {
+          OR: [{ id }, { docNumber: id }],
+        },
         include: {
           items: { orderBy: { itemOrder: "asc" } },
           refInvoice: true,
@@ -336,10 +338,37 @@ export async function updateExistingDocument(id: string, body: any) {
 export async function deleteDocumentById(id: string) {
   if (isRemoteDatabaseConfigured()) {
     try {
-      await prisma.document.delete({ where: { id } })
+      const doc = await prisma.document.findFirst({
+        where: {
+          OR: [{ id }, { docNumber: id }],
+        },
+      })
+      if (!doc) {
+        return false
+      }
+
+      // If any receipts reference this invoice, unlink them so FK doesn't fail
+      await prisma.document.updateMany({
+        where: { refInvoiceId: doc.id },
+        data: { refInvoiceId: null },
+      })
+
+      // Delete items
+      await prisma.documentItem.deleteMany({
+        where: { documentId: doc.id },
+      })
+
+      // Delete document
+      await prisma.document.delete({
+        where: { id: doc.id },
+      })
+
+      deleteMockDocument(doc.id)
+      deleteMockDocument(doc.docNumber)
       return true
     } catch (err) {
-      console.warn("Prisma deleteDocumentById failed, using mock fallback:", err)
+      console.error("Prisma deleteDocumentById failed:", err)
+      return false
     }
   }
 

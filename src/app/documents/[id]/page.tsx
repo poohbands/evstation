@@ -540,9 +540,13 @@ function DocumentDetailContent() {
         method: "DELETE",
       })
       if (!res.ok) {
-        throw new Error("ไม่สามารถลบเอกสารได้")
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "ไม่สามารถลบเอกสารได้")
       }
       removeLocalDocument(id)
+      if (document?.docNumber) {
+        removeLocalDocument(document.docNumber)
+      }
       toast({
         title: "ลบเอกสารสำเร็จ",
         description: "นำเอกสารออกจากระบบเรียบร้อยแล้ว",

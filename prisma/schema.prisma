@@ -71,7 +71,7 @@ model Document {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   items               DocumentItem[]
-  refInvoice          Document?      @relation("InvoiceReceipts", fields: [refInvoiceId], references: [id])
+  refInvoice          Document?      @relation("InvoiceReceipts", fields: [refInvoiceId], references: [id], onDelete: SetNull)
   receipts            Document[]     @relation("InvoiceReceipts")
 
   // PEA VOLTA fields

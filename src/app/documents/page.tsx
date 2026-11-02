@@ -73,7 +73,7 @@ import {
   STATUS_LABELS,
   THAI_MONTHS,
 } from "@/lib/utils"
-import { getLocalDocuments, removeLocalDocument } from "@/lib/client-storage"
+import { getLocalDocuments, removeLocalDocument, setLocalDocuments } from "@/lib/client-storage"
 import type { DocumentWithItems } from "@/types"
 
 function sortDocumentsList(docs: DocumentWithItems[], sortKey: string): DocumentWithItems[] {
@@ -154,36 +154,29 @@ export default function DocumentsPage() {
       const data = await res.json()
       const serverDocs: DocumentWithItems[] = Array.isArray(data) ? data : []
 
-      // Merge client local documents (prevents disappearing on serverless cold starts)
-      // Apply the same filters to local docs so wrong doc types don't leak through
-      const localDocs = getLocalDocuments()
-      const merged = [...serverDocs]
-      for (const ld of localDocs) {
-        if (merged.some(d => d.id === ld.id || (ld.docNumber && d.docNumber === ld.docNumber))) continue
-        // Apply same filters as the server query
-        if (typeFilter && typeFilter !== "ALL" && ld.docType !== typeFilter) continue
-        if (statusFilter && statusFilter !== "ALL" && ld.status !== statusFilter) continue
-        if (monthFilter && monthFilter !== "ALL" && ld.billingMonth !== parseInt(monthFilter)) continue
-        if (yearFilter && yearFilter !== "ALL" && ld.billingYear !== parseInt(yearFilter)) continue
-        if (searchTerm.trim()) {
-          const q = searchTerm.trim().toLowerCase()
-          const match =
-            (ld.docNumber || "").toLowerCase().includes(q) ||
-            (ld.customerName || "").toLowerCase().includes(q) ||
-            (ld.stationName || "").toLowerCase().includes(q)
-          if (!match) continue
-        }
-        merged.push(ld)
-        // Re-sync to server in background
-        fetch("/api/documents", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ld),
-        }).catch(() => {})
+      // When all filters are reset, update local storage cache to match server
+      if (typeFilter === "ALL" && statusFilter === "ALL" && monthFilter === "ALL" && yearFilter === "ALL" && !searchTerm.trim()) {
+        setLocalDocuments(serverDocs)
+      } else {
+        // Purge any documents from localStorage that no longer exist on the server
+        const currentDocNumbers = new Set(serverDocs.map(d => d.docNumber))
+        const local = getLocalDocuments()
+        const cleaned = local.filter(d => {
+          const matchesFilter =
+            (typeFilter === "ALL" || d.docType === typeFilter) &&
+            (statusFilter === "ALL" || d.status === statusFilter) &&
+            (monthFilter === "ALL" || d.billingMonth === parseInt(monthFilter)) &&
+            (yearFilter === "ALL" || d.billingYear === parseInt(yearFilter))
+          if (matchesFilter) {
+            return currentDocNumbers.has(d.docNumber)
+          }
+          return true
+        })
+        setLocalDocuments(cleaned)
       }
 
       // Sort according to current sort criteria
-      const sorted = sortDocumentsList(merged, sortByRef.current)
+      const sorted = sortDocumentsList(serverDocs, sortByRef.current)
       setDocuments(sorted)
     } catch (err: any) {
       console.error(err)
@@ -332,6 +325,7 @@ export default function DocumentsPage() {
     if (!deleteId) return
     try {
       setIsDeleting(true)
+      const targetDoc = documents.find((d) => d.id === deleteId)
       const res = await fetch(`/api/documents/${deleteId}`, {
         method: "DELETE",
       })
@@ -340,6 +334,9 @@ export default function DocumentsPage() {
         throw new Error(data.error || "ไม่สามารถลบเอกสารได้")
       }
       removeLocalDocument(deleteId)
+      if (targetDoc?.docNumber) {
+        removeLocalDocument(targetDoc.docNumber)
+      }
       toast({
         title: "ลบเอกสารสำเร็จ",
         description: "นำเอกสารออกจากระบบเรียบร้อยแล้ว",
