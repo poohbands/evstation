@@ -23,6 +23,13 @@ import {
   MapPin,
   Building2,
   Info,
+  Search,
+  Download,
+  UploadCloud,
+  FileSpreadsheet,
+  Coins,
+  ArrowUpDown,
+  Car,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -45,6 +52,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
+import defaultTransactions from "@/data/phayaSueaTransactions.json"
 
 const LOOKER_STUDIO_DIRECT_URL =
   "https://datastudio.google.com/u/0/reporting/c095ebd9-3ddc-481d-99e6-942ab0ab354e/page/m0ViF"
@@ -53,89 +61,323 @@ const LOOKER_STUDIO_EMBED_URL =
 
 const TARGET_STATION_NAME = "สถานีชาร์จ พญาเสืออีวี"
 
+export interface TransactionRecord {
+  id: string
+  date: string
+  dateIso: string
+  stationName: string
+  chargerDevice: string
+  connector: string
+  vcard: string
+  startTime: string
+  stopTime: string
+  duration: string
+  durationSeconds: number
+  durationMinutes: number
+  kwh: number
+  revenue: number
+}
+
 export default function StationReportsPage() {
   const { toast } = useToast()
 
-  // Filters State - Defaulted exclusively to สถานีชาร์จ พญาเสืออีวี
-  const [datePreset, setDatePreset] = React.useState<string>("THIS_MONTH")
+  // Transactions State
+  const [transactions, setTransactions] = React.useState<TransactionRecord[]>(
+    defaultTransactions as TransactionRecord[]
+  )
+
+  // Filters State - Defaulted to October 2026 (รอบเดือนตุลาคม 2569)
+  const [datePreset, setDatePreset] = React.useState<string>("OCT_2026")
   const [startDate, setStartDate] = React.useState<string>("2026-10-01")
   const [endDate, setEndDate] = React.useState<string>("2026-10-31")
   const [stationFilter, setStationFilter] = React.useState<string>("PHAYA_SUEA")
   const [chargerFilter, setChargerFilter] = React.useState<string>("ALL")
-  const [statusFilter, setStatusFilter] = React.useState<string>("ALL")
+  const [searchQuery, setSearchQuery] = React.useState<string>("")
 
   // UI State
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false)
   const [iframeKey, setIframeKey] = React.useState<number>(1)
   const [iframeLoading, setIframeLoading] = React.useState<boolean>(true)
-  const [activeTab, setActiveTab] = React.useState<string>("looker")
+  const [activeTab, setActiveTab] = React.useState<string>("analytics")
+  const [txPage, setTxPage] = React.useState<number>(1)
+  const [csvUploadStatus, setCsvUploadStatus] = React.useState<string>("")
+  const itemsPerPage = 15
 
   // Quick preset dates handler
   const handlePresetChange = (preset: string) => {
     setDatePreset(preset)
-    const today = new Date()
-    const y = today.getFullYear()
-    const m = String(today.getMonth() + 1).padStart(2, "0")
-    const d = String(today.getDate()).padStart(2, "0")
+    setTxPage(1)
 
     switch (preset) {
-      case "TODAY":
-        setStartDate(`${y}-${m}-${d}`)
-        setEndDate(`${y}-${m}-${d}`)
+      case "OCT_2026":
+        setStartDate("2026-10-01")
+        setEndDate("2026-10-31")
+        break
+      case "NOV_2026":
+        setStartDate("2026-11-01")
+        setEndDate("2026-11-30")
+        break
+      case "ALL_DATA":
+        setStartDate("2026-10-01")
+        setEndDate("2026-11-30")
         break
       case "LAST_7_DAYS": {
-        const past = new Date(today.getTime() - 7 * 86400000)
+        const past = new Date(Date.now() - 7 * 86400000)
         setStartDate(past.toISOString().slice(0, 10))
-        setEndDate(`${y}-${m}-${d}`)
+        setEndDate(new Date().toISOString().slice(0, 10))
         break
       }
-      case "LAST_30_DAYS": {
-        const past = new Date(today.getTime() - 30 * 86400000)
-        setStartDate(past.toISOString().slice(0, 10))
-        setEndDate(`${y}-${m}-${d}`)
+      case "TODAY": {
+        const todayIso = new Date().toISOString().slice(0, 10)
+        setStartDate(todayIso)
+        setEndDate(todayIso)
         break
       }
-      case "THIS_MONTH":
-        setStartDate(`${y}-${m}-01`)
-        setEndDate(`${y}-${m}-${d}`)
-        break
-      case "LAST_MONTH": {
-        const prevMonth = today.getMonth() === 0 ? 12 : today.getMonth()
-        const prevYear = today.getMonth() === 0 ? y - 1 : y
-        const pmStr = String(prevMonth).padStart(2, "0")
-        const lastDay = new Date(prevYear, prevMonth, 0).getDate()
-        setStartDate(`${prevYear}-${pmStr}-01`)
-        setEndDate(`${prevYear}-${pmStr}-${lastDay}`)
-        break
-      }
-      case "THIS_YEAR":
-        setStartDate(`${y}-01-01`)
-        setEndDate(`${y}-12-31`)
-        break
       default:
         break
     }
   }
+
+  // Filtered transactions
+  const filteredTransactions = React.useMemo(() => {
+    return transactions.filter((tx) => {
+      // Date range filter
+      if (startDate && tx.dateIso < startDate) return false
+      if (endDate && tx.dateIso > endDate) return false
+
+      // Connector filter
+      if (chargerFilter !== "ALL" && tx.connector !== chargerFilter) {
+        return false
+      }
+
+      // Search Query filter (vcard, connector, date, time)
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase()
+        const match =
+          tx.vcard.toLowerCase().includes(q) ||
+          tx.connector.toLowerCase().includes(q) ||
+          tx.date.includes(q) ||
+          tx.startTime.includes(q)
+        if (!match) return false
+      }
+
+      return true
+    })
+  }, [transactions, startDate, endDate, chargerFilter, searchQuery])
+
+  // Aggregate Metrics
+  const stats = React.useMemo(() => {
+    const totalSessions = filteredTransactions.length
+    const totalKwh = filteredTransactions.reduce((sum, t) => sum + t.kwh, 0)
+    const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.revenue, 0)
+    const totalSeconds = filteredTransactions.reduce(
+      (sum, t) => sum + t.durationSeconds,
+      0
+    )
+    const avgDurationMin =
+      totalSessions > 0
+        ? Math.round((totalSeconds / totalSessions / 60) * 10) / 10
+        : 0
+    const avgKwhPerSession =
+      totalSessions > 0 ? Math.round((totalKwh / totalSessions) * 100) / 100 : 0
+    const avgRatePerKwh =
+      totalKwh > 0 ? Math.round((totalRevenue / totalKwh) * 100) / 100 : 7.5
+
+    // Breakdown by connector
+    const connectorsMap: Record<
+      string,
+      { count: number; kwh: number; revenue: number; seconds: number }
+    > = {
+      "CCS2-1": { count: 0, kwh: 0, revenue: 0, seconds: 0 },
+      "CCS2-2": { count: 0, kwh: 0, revenue: 0, seconds: 0 },
+    }
+
+    filteredTransactions.forEach((t) => {
+      const conn = t.connector || "CCS2-1"
+      if (!connectorsMap[conn]) {
+        connectorsMap[conn] = { count: 0, kwh: 0, revenue: 0, seconds: 0 }
+      }
+      connectorsMap[conn].count += 1
+      connectorsMap[conn].kwh += t.kwh
+      connectorsMap[conn].revenue += t.revenue
+      connectorsMap[conn].seconds += t.durationSeconds
+    })
+
+    // Breakdown by date
+    const dailyMap: Record<
+      string,
+      { date: string; dateIso: string; count: number; kwh: number; revenue: number }
+    > = {}
+
+    filteredTransactions.forEach((t) => {
+      const key = t.dateIso || t.date
+      if (!dailyMap[key]) {
+        dailyMap[key] = {
+          date: t.date,
+          dateIso: t.dateIso,
+          count: 0,
+          kwh: 0,
+          revenue: 0,
+        }
+      }
+      dailyMap[key].count += 1
+      dailyMap[key].kwh += t.kwh
+      dailyMap[key].revenue += t.revenue
+    })
+
+    const dailyList = Object.values(dailyMap).sort((a, b) =>
+      b.dateIso.localeCompare(a.dateIso)
+    )
+
+    return {
+      totalSessions,
+      totalKwh: Math.round(totalKwh * 100) / 100,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      avgDurationMin,
+      avgKwhPerSession,
+      avgRatePerKwh,
+      connectors: connectorsMap,
+      dailyList,
+    }
+  }, [filteredTransactions])
+
+  // Pagination for transaction table
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1
+  const paginatedTransactions = React.useMemo(() => {
+    const start = (txPage - 1) * itemsPerPage
+    return filteredTransactions.slice(start, start + itemsPerPage)
+  }, [filteredTransactions, txPage, itemsPerPage])
 
   const handleRefreshIframe = () => {
     setIframeLoading(true)
     setIframeKey((prev) => prev + 1)
     toast({
       title: "กำลังรีเฟรชข้อมูลรายงาน...",
-      description: `กำลังโหลดรายงานของ ${TARGET_STATION_NAME} ล่าสุด`,
+      description: `กำลังโหลดข้อมูลและรายงานของ ${TARGET_STATION_NAME} ล่าสุด`,
     })
   }
 
   const handleResetFilters = () => {
-    setDatePreset("THIS_MONTH")
-    handlePresetChange("THIS_MONTH")
-    setStationFilter("PHAYA_SUEA")
+    setDatePreset("OCT_2026")
+    setStartDate("2026-10-01")
+    setEndDate("2026-10-31")
     setChargerFilter("ALL")
-    setStatusFilter("ALL")
+    setSearchQuery("")
+    setTxPage(1)
     toast({
       title: "รีเซ็ตตัวกรองแล้ว",
-      description: `กรองข้อมูลเฉพาะ ${TARGET_STATION_NAME} (รอบเดือนปัจจุบัน)`,
+      description: "แสดงข้อมูลเดือนตุลาคม 2569 ของสถานีชาร์จ พญาเสืออีวี",
     })
+  }
+
+  // Export filtered data as CSV
+  const handleExportCsv = () => {
+    const header =
+      "วันที่,ชื่อสถานีอัดประจุ,ชื่อเครื่องอัดประจุ,หัวชาร์จ,vcard,start_timestamp,stop_timestamp,daration,หน่วยไฟฟ้า (kWh),รายได้ (บาท)\n"
+    const rows = filteredTransactions
+      .map(
+        (t) =>
+          `"${t.date}","${t.stationName}","${t.chargerDevice}","${t.connector}","${t.vcard}","${t.startTime}","${t.stopTime}","${t.duration}",${t.kwh},${t.revenue}`
+      )
+      .join("\n")
+
+    const blob = new Blob(["\uFEFF" + header + rows], {
+      type: "text/csv;charset=utf-8;",
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.setAttribute(
+      "download",
+      `รายงานสถานีชาร์จ_พญาเสืออีวี_${startDate}_${endDate}.csv`
+    )
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast({
+      title: "ส่งออกไฟล์เรียบร้อย",
+      description: `ดาวน์โหลดข้อมูล ${filteredTransactions.length} รายการเป็น CSV แล้ว`,
+    })
+  }
+
+  // CSV File Uploader / Parser for future Connext Dashboard exports
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setCsvUploadStatus(`กำลังอ่านไฟล์: ${file.name}...`)
+    const reader = new FileReader()
+
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string
+        const lines = text.trim().split("\n").filter(Boolean)
+        if (lines.length < 2) {
+          throw new Error("ไฟล์ CSV ว่างเปล่าหรือไม่มีข้อมูลแถว")
+        }
+
+        function parseDurationSeconds(dur: string) {
+          if (!dur) return 0
+          const parts = dur.split(":").map(Number)
+          if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+          return 0
+        }
+
+        function parseDateIso(d: string) {
+          if (!d) return ""
+          const parts = d.split("/")
+          if (parts.length === 3) {
+            return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`
+          }
+          return d
+        }
+
+        const newRecords: TransactionRecord[] = lines.slice(1).map((l, index) => {
+          const parts = l.split(",")
+          const dateStr = parts[0]?.trim() || ""
+          const durStr = parts[7]?.trim() || "0:00:00"
+          const kwh = parseFloat(parts[8]) || 0
+          const revenue = parseFloat(parts[9]) || 0
+          const durSec = parseDurationSeconds(durStr)
+
+          return {
+            id: `upload-${Date.now()}-${index}`,
+            date: dateStr,
+            dateIso: parseDateIso(dateStr),
+            stationName: parts[1]?.trim() || TARGET_STATION_NAME,
+            chargerDevice: parts[2]?.trim() || TARGET_STATION_NAME,
+            connector: parts[3]?.trim() || "CCS2-1",
+            vcard: parts[4]?.trim() || "",
+            startTime: parts[5]?.trim() || "",
+            stopTime: parts[6]?.trim() || "",
+            duration: durStr,
+            durationSeconds: durSec,
+            durationMinutes: Math.round((durSec / 60) * 10) / 10,
+            kwh: Math.round(kwh * 100) / 100,
+            revenue: Math.round(revenue * 100) / 100,
+          }
+        })
+
+        setTransactions(newRecords)
+        setCsvUploadStatus(
+          `นำเข้าสำเร็จ! พบ ${newRecords.length} รายการจาก ${file.name}`
+        )
+        toast({
+          title: "นำเข้าไฟล์ CSV สำเร็จ",
+          description: `อัปเดตข้อมูลสถานีชาร์จ ${newRecords.length} รายการเรียบร้อยแล้ว`,
+        })
+      } catch (err: any) {
+        setCsvUploadStatus(`เกิดข้อผิดพลาด: ${err.message || "ไม่สามารถอ่านไฟล์ได้"}`)
+        toast({
+          title: "นำเข้าไฟล์ล้มเหลว",
+          description: "โปรดตรวจสอบว่าเป็นไฟล์ CSV ที่ Export มาจาก Connext Dashboard",
+          variant: "destructive",
+        })
+      }
+    }
+
+    reader.readAsText(file, "UTF-8")
   }
 
   return (
@@ -174,11 +416,21 @@ export default function StationReportsPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={handleExportCsv}
+              className="gap-1.5 text-xs shadow-sm bg-white text-slate-700"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-600" />
+              ดาวน์โหลด CSV ({filteredTransactions.length})
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleRefreshIframe}
               className="gap-1.5 text-xs shadow-sm bg-white"
             >
               <RefreshCw className="h-3.5 w-3.5 text-slate-600" />
-              รีเฟรชรายงาน
+              รีเฟรช
             </Button>
 
             <Button
@@ -216,29 +468,32 @@ export default function StationReportsPage() {
           </div>
         </div>
 
-        {/* Info Banner for Station-Specific Filtering */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+        {/* Source Verified Banner */}
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-start gap-2.5">
-            <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-blue-950">
-                ดึงข้อมูลเฉพาะสถานีชาร์จ พญาเสืออีวี (Phaya Suea EV Station)
+              <p className="font-semibold text-emerald-950 flex items-center gap-2">
+                <span>ข้อมูลจริงจากระบบสถานี: สถานีชาร์จ พญาเสืออีวี (CONNEXT DASHBOARD)</span>
+                <Badge className="bg-emerald-600 text-white text-[10px] py-0 px-1.5">
+                  เชื่อมโยงข้อมูลจริงแล้ว
+                </Badge>
               </p>
-              <p className="text-[11px] text-blue-800 mt-0.5 leading-relaxed">
-                รายงานและตัวกรองทั้งหมดในหน้านี้ถูกตั้งค่าให้กรองข้อมูลเฉพาะสถานีชาร์จพญาเสืออีวี จังหวัดพิษณุโลก หากเปิดผ่าน Looker Studio ต้นฉบับ สามารถเลือกตัวกรอง <strong>&quot;ชื่อสถานี: สถานีชาร์จ พญาเสืออีวี&quot;</strong> ได้ทันที
+              <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
+                ระบบได้เชื่อมโยงชุดข้อมูลการชาร์จของสถานีชาร์จ พญาเสืออีวี จากระบบ CONNEXT DASHBOARD (รอบเดือนตุลาคม 2569 มี <strong>171 ครั้ง</strong>, จ่ายไฟ <strong>4,257.02 kWh</strong>, รายได้ <strong>31,927.72 บาท</strong>) ตัวเลขแดชบอร์ดด้านล่างจะคำนวณตามช่วงวันที่และหัวชาร์จที่คุณเลือกแบบ Real-time
               </p>
             </div>
           </div>
-          <a
-            href={LOOKER_STUDIO_DIRECT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0"
-          >
-            <Button size="sm" variant="outline" className="h-8 text-xs bg-white text-blue-700 hover:text-blue-900 border-blue-300">
-              ไปที่รายงานพญาเสืออีวี &rarr;
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handlePresetChange("OCT_2026")}
+              className="h-8 text-xs bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+            >
+              ดูรอบ ต.ค. 2569
             </Button>
-          </a>
+          </div>
         </div>
 
         {/* Filter Bar (ตัวกรองข้อมูลเฉพาะสถานีชาร์จ พญาเสืออีวี) */}
@@ -258,11 +513,11 @@ export default function StationReportsPage() {
               {/* Quick Date Presets */}
               <div className="flex flex-wrap gap-1">
                 {[
-                  { id: "TODAY", label: "วันนี้" },
+                  { id: "OCT_2026", label: "ตุลาคม 2569 (ข้อมูลจากสถานี)" },
+                  { id: "ALL_DATA", label: "ข้อมูลทั้งหมด (172 รายการ)" },
+                  { id: "NOV_2026", label: "พฤศจิกายน 2569" },
                   { id: "LAST_7_DAYS", label: "7 วันล่าสุด" },
-                  { id: "THIS_MONTH", label: "เดือนนี้" },
-                  { id: "LAST_MONTH", label: "เดือนก่อน" },
-                  { id: "THIS_YEAR", label: "ทั้งปี 2569" },
+                  { id: "TODAY", label: "วันนี้" },
                 ].map((preset) => (
                   <button
                     key={preset.id}
@@ -283,7 +538,7 @@ export default function StationReportsPage() {
 
           <CardContent className="pt-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 items-end">
-              {/* Station Selection - Dedicated to สถานีชาร์จ พญาเสืออีวี */}
+              {/* Station Selection */}
               <div className="space-y-1">
                 <Label className="text-xs text-slate-600 flex items-center justify-between">
                   <span>สถานีชาร์จ</span>
@@ -335,18 +590,17 @@ export default function StationReportsPage() {
                 />
               </div>
 
-              {/* Charger Type Select */}
+              {/* Charger Connector Select */}
               <div className="space-y-1">
-                <Label className="text-xs text-slate-600">ประเภทหัวชาร์จ</Label>
+                <Label className="text-xs text-slate-600">หัวชาร์จ (Connector)</Label>
                 <Select value={chargerFilter} onValueChange={setChargerFilter}>
                   <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="เลือกประเภทหัวชาร์จ" />
+                    <SelectValue placeholder="เลือกหัวชาร์จ" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">ทุกหัวชาร์จ (สถานีพญาเสืออีวี)</SelectItem>
-                    <SelectItem value="DC_CCS2">DC Fast Charge (CCS2 120 kW)</SelectItem>
-                    <SelectItem value="DC_CHA">DC Fast Charge (CHAdeMO 60 kW)</SelectItem>
-                    <SelectItem value="AC_TYPE2">AC Normal Charge (Type 2 22 kW)</SelectItem>
+                    <SelectItem value="ALL">ทุกหัวชาร์จ (CCS2-1 & CCS2-2)</SelectItem>
+                    <SelectItem value="CCS2-1">เฉพาะหัวชาร์จ CCS2-1 (120 kW)</SelectItem>
+                    <SelectItem value="CCS2-2">เฉพาะหัวชาร์จ CCS2-2 (120 kW)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -355,18 +609,24 @@ export default function StationReportsPage() {
               <div className="flex gap-2">
                 <Button
                   type="button"
-                  onClick={handleRefreshIframe}
+                  onClick={() => {
+                    setTxPage(1)
+                    toast({
+                      title: "กรองข้อมูลแล้ว",
+                      description: `พบข้อมูล ${filteredTransactions.length} รายการ`,
+                    })
+                  }}
                   className="h-9 w-full text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1 shadow-sm"
                 >
                   <Filter className="h-3.5 w-3.5" />
-                  กรองข้อมูล
+                  นำไปใช้ ({filteredTransactions.length})
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleResetFilters}
                   className="h-9 px-3 text-xs text-slate-600 hover:text-slate-900"
-                  title="คืนค่าตัวกรองเริ่มต้น"
+                  title="คืนค่าตัวกรองเริ่มต้น (ตุลาคม 2569)"
                 >
                   ล้าง
                 </Button>
@@ -375,12 +635,13 @@ export default function StationReportsPage() {
           </CardContent>
         </Card>
 
-        {/* KPI Summary Overview (แดชบอร์ดสรุปผล สถานีชาร์จ พญาเสืออีวี) */}
+        {/* Dynamic KPI Summary Cards (คำนวณจากข้อมูลจริงของสถานีชาร์จ พญาเสืออีวี) */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* Card 1: พลังงานไฟฟ้าสะสม (kWh) */}
           <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-blue-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
-                พลังงานจ่ายสะสม (พญาเสืออีวี)
+                พลังงานจ่ายสะสม (Energy)
               </CardTitle>
               <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
                 <Zap className="h-4 w-4" />
@@ -388,14 +649,23 @@ export default function StationReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900">
-                18,450.50 <span className="text-xs font-normal text-slate-500">kWh</span>
+                {stats.totalKwh.toLocaleString("th-TH", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                <span className="text-xs font-normal text-slate-500">kWh</span>
               </div>
-              <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-1">
-                <TrendingUp className="h-3 w-3" /> ยอดสะสมสถานีพญาเสืออีวี
+              <p className="text-[11px] text-blue-700 font-medium flex items-center gap-1 mt-1">
+                <TrendingUp className="h-3 w-3" /> เฉลี่ย{" "}
+                {stats.avgKwhPerSession.toLocaleString("th-TH", {
+                  minimumFractionDigits: 2,
+                })}{" "}
+                kWh/รอบ
               </p>
             </CardContent>
           </Card>
 
+          {/* Card 2: จำนวนรอบการเข้าชาร์จ (Sessions) */}
           <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-emerald-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
@@ -407,18 +677,44 @@ export default function StationReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900">
-                642 <span className="text-xs font-normal text-slate-500">ครั้ง</span>
+                {stats.totalSessions.toLocaleString("th-TH")}{" "}
+                <span className="text-xs font-normal text-slate-500">ครั้ง</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                เฉลี่ยประมาณ 21 คัน / วัน
+              <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1 mt-1">
+                <Car className="h-3 w-3" /> ข้อมูลเฉพาะสถานีพญาเสืออีวี
               </p>
             </CardContent>
           </Card>
 
+          {/* Card 3: รายได้รวมค่าชาร์จ (บาท) */}
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-amber-50/50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs font-medium text-slate-600">
+                รายได้รวมค่าบริการชาร์จ
+              </CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
+                <Coins className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">
+                ฿
+                {stats.totalRevenue.toLocaleString("th-TH", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+              <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1 mt-1">
+                อัตราเฉลี่ย ~{stats.avgRatePerKwh.toFixed(2)} บาท/kWh
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Card 4: เวลาชาร์จเฉลี่ย (นาที) */}
           <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-purple-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
-                เวลาชาร์จเฉลี่ย (Avg Time)
+                ระยะเวลาชาร์จเฉลี่ย
               </CardTitle>
               <div className="h-8 w-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
                 <Clock className="h-4 w-4" />
@@ -426,29 +722,13 @@ export default function StationReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900">
-                36.8 <span className="text-xs font-normal text-slate-500">นาที</span>
+                {stats.avgDurationMin.toLocaleString("th-TH", {
+                  minimumFractionDigits: 1,
+                })}{" "}
+                <span className="text-xs font-normal text-slate-500">นาที</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                กำลังชาร์จเฉลี่ย 48.5 kW
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-amber-50/50">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium text-slate-600">
-                สถานะหัวจ่าย (พญาเสืออีวี)
-              </CardTitle>
-              <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-emerald-700">
-                99.8% <span className="text-xs font-normal text-slate-500">พร้อมใช้งาน</span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                พร้อมบริการ 4/4 หัวจ่าย
+              <p className="text-[11px] text-purple-700 font-medium flex items-center gap-1 mt-1">
+                หัวจ่าย DC Fast Charge (CCS2)
               </p>
             </CardContent>
           </Card>
@@ -457,17 +737,400 @@ export default function StationReportsPage() {
         {/* View Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="bg-slate-100 p-1">
-            <TabsTrigger value="looker" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <BarChart3 className="h-3.5 w-3.5" />
+            <TabsTrigger
+              value="analytics"
+              className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-blue-600" />
+              วิเคราะห์ข้อมูลสถานี (Data Analytics)
+            </TabsTrigger>
+            <TabsTrigger
+              value="looker"
+              className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-purple-600" />
               แดชบอร์ด Google Looker Studio
             </TabsTrigger>
-            <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              <Layers className="h-3.5 w-3.5" />
-              หัวจ่าย สถานีชาร์จ พญาเสืออีวี
+            <TabsTrigger
+              value="upload"
+              className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
+              <UploadCloud className="h-3.5 w-3.5 text-emerald-600" />
+              นำเข้าไฟล์ CSV เพิ่มเติม
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: Looker Studio Embed */}
+          {/* TAB 1: DATA ANALYTICS (REAL PHAYA SUEA DATA) */}
+          <TabsContent value="analytics" className="space-y-6">
+            {/* Charger Connector Breakdown Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Connector CCS2-1 */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-3 bg-slate-50/60 border-b border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                        1
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-bold text-slate-900">
+                          หัวชาร์จ CCS2-1 (DC Fast Charge)
+                        </CardTitle>
+                        <CardDescription className="text-[11px]">
+                          กำลังไฟสูงสุด 120 kW • สถานีชาร์จ พญาเสืออีวี
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                      พร้อมใช้งาน
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">จำนวนรอบ</span>
+                      <span className="text-lg font-bold text-slate-900">
+                        {stats.connectors["CCS2-1"]?.count || 0}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">ครั้ง</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">พลังงาน</span>
+                      <span className="text-lg font-bold text-blue-600">
+                        {(stats.connectors["CCS2-1"]?.kwh || 0).toLocaleString(
+                          "th-TH",
+                          { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">kWh</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">รายได้</span>
+                      <span className="text-lg font-bold text-emerald-600">
+                        ฿
+                        {(stats.connectors["CCS2-1"]?.revenue || 0).toLocaleString(
+                          "th-TH",
+                          { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">บาท</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                    <span>ระยะเวลาชาร์จเฉลี่ย:</span>
+                    <span className="font-semibold text-slate-900">
+                      {stats.connectors["CCS2-1"]?.count
+                        ? Math.round(
+                            (stats.connectors["CCS2-1"].seconds /
+                              stats.connectors["CCS2-1"].count /
+                              60) *
+                              10
+                          ) / 10
+                        : 0}{" "}
+                      นาที/รอบ
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Connector CCS2-2 */}
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="pb-3 bg-slate-50/60 border-b border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                        2
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-bold text-slate-900">
+                          หัวชาร์จ CCS2-2 (DC Fast Charge)
+                        </CardTitle>
+                        <CardDescription className="text-[11px]">
+                          กำลังไฟสูงสุด 120 kW • สถานีชาร์จ พญาเสืออีวี
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                      พร้อมใช้งาน
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">จำนวนรอบ</span>
+                      <span className="text-lg font-bold text-slate-900">
+                        {stats.connectors["CCS2-2"]?.count || 0}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">ครั้ง</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">พลังงาน</span>
+                      <span className="text-lg font-bold text-purple-600">
+                        {(stats.connectors["CCS2-2"]?.kwh || 0).toLocaleString(
+                          "th-TH",
+                          { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">kWh</span>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                      <span className="text-[11px] text-slate-500 block">รายได้</span>
+                      <span className="text-lg font-bold text-emerald-600">
+                        ฿
+                        {(stats.connectors["CCS2-2"]?.revenue || 0).toLocaleString(
+                          "th-TH",
+                          { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">บาท</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                    <span>ระยะเวลาชาร์จเฉลี่ย:</span>
+                    <span className="font-semibold text-slate-900">
+                      {stats.connectors["CCS2-2"]?.count
+                        ? Math.round(
+                            (stats.connectors["CCS2-2"].seconds /
+                              stats.connectors["CCS2-2"].count /
+                              60) *
+                              10
+                          ) / 10
+                        : 0}{" "}
+                      นาที/รอบ
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Daily Summary Table */}
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-slate-900">
+                      สรุปสถิติรายวัน (Daily Breakdown)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      ยอดชาร์จสะสมรายวันของสถานีชาร์จ พญาเสืออีวี ในช่วงเวลาที่เลือก
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {stats.dailyList.length} วันที่มีการใช้งาน
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500 border-b border-slate-200 sticky top-0 z-10">
+                      <tr>
+                        <th className="py-2.5 px-4">วันที่</th>
+                        <th className="py-2.5 px-4 text-center">จำนวนรอบ (ครั้ง)</th>
+                        <th className="py-2.5 px-4 text-right">พลังงาน (kWh)</th>
+                        <th className="py-2.5 px-4 text-right">รายได้ (บาท)</th>
+                        <th className="py-2.5 px-4">สัดส่วนพลังงานประจำวัน</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {stats.dailyList.map((day) => {
+                        const percentOfMax = Math.min(
+                          100,
+                          Math.round((day.kwh / 600) * 100)
+                        )
+                        return (
+                          <tr key={day.date} className="hover:bg-slate-50/80">
+                            <td className="py-2.5 px-4 font-medium text-slate-900">
+                              {day.date}
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              <Badge
+                                variant="secondary"
+                                className="font-mono text-xs px-2 py-0.5"
+                              >
+                                {day.count}
+                              </Badge>
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-semibold text-blue-600 font-mono">
+                              {day.kwh.toLocaleString("th-TH", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td className="py-2.5 px-4 text-right font-semibold text-emerald-600 font-mono">
+                              ฿
+                              {day.revenue.toLocaleString("th-TH", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td className="py-2.5 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-32 rounded-full bg-slate-100 overflow-hidden">
+                                  <div
+                                    className="h-full bg-blue-600 rounded-full"
+                                    style={{ width: `${percentOfMax}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-slate-400">
+                                  {percentOfMax}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {stats.dailyList.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="py-8 text-center text-slate-500 text-xs"
+                          >
+                            ไม่พบข้อมูลในช่วงวันที่เลือก
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Individual Transaction Logs Table */}
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-slate-900">
+                      รายการบันทึกการชาร์จรายคัน (Transaction Details)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      แสดงประวัติการชาร์จ {filteredTransactions.length} รายการของสถานีชาร์จ พญาเสืออีวี
+                    </CardDescription>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      <Input
+                        type="text"
+                        placeholder="ค้นหา VCard, หัวชาร์จ, วันที่..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value)
+                          setTxPage(1)
+                        }}
+                        className="h-8 pl-8 text-xs bg-slate-50"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4">ลำดับ</th>
+                        <th className="py-3 px-4">วันที่ & เวลา</th>
+                        <th className="py-3 px-4">หัวชาร์จ</th>
+                        <th className="py-3 px-4">รหัสบัตร / VCard</th>
+                        <th className="py-3 px-4">ระยะเวลา</th>
+                        <th className="py-3 px-4 text-right">พลังงาน (kWh)</th>
+                        <th className="py-3 px-4 text-right">ค่าบริการ (บาท)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {paginatedTransactions.map((tx, idx) => (
+                        <tr key={tx.id} className="hover:bg-slate-50/70">
+                          <td className="py-2.5 px-4 text-slate-400 font-mono text-[11px]">
+                            {(txPage - 1) * itemsPerPage + idx + 1}
+                          </td>
+                          <td className="py-2.5 px-4 font-medium text-slate-900">
+                            <div>{tx.startTime}</div>
+                            <div className="text-[10px] text-slate-400">
+                              ถึง {tx.stopTime.split(" ")[1] || tx.stopTime}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <Badge
+                              className={
+                                tx.connector === "CCS2-1"
+                                  ? "bg-blue-100 text-blue-800 border-blue-200"
+                                  : "bg-purple-100 text-purple-800 border-purple-200"
+                              }
+                            >
+                              {tx.connector}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-4 font-mono text-slate-600">
+                            {tx.vcard || "-"}
+                          </td>
+                          <td className="py-2.5 px-4 font-mono text-slate-600">
+                            {tx.duration}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-mono font-semibold text-blue-600">
+                            {tx.kwh.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-600">
+                            ฿{tx.revenue.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                      {paginatedTransactions.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="py-12 text-center text-slate-500 text-xs"
+                          >
+                            ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="border-t border-slate-100 p-3 flex items-center justify-between text-xs text-slate-600">
+                  <div>
+                    แสดง {(txPage - 1) * itemsPerPage + 1} ถึง{" "}
+                    {Math.min(txPage * itemsPerPage, filteredTransactions.length)}{" "}
+                    จากทั้งหมด {filteredTransactions.length} รายการ
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={txPage <= 1}
+                      onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                      className="h-7 text-xs px-2.5"
+                    >
+                      ก่อนหน้า
+                    </Button>
+                    <span className="text-xs px-2 font-medium">
+                      {txPage} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={txPage >= totalPages}
+                      onClick={() => setTxPage((p) => Math.min(totalPages, p + 1))}
+                      className="h-7 text-xs px-2.5"
+                    >
+                      ถัดไป
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 2: LOOKER STUDIO EMBED */}
           <TabsContent value="looker" className="space-y-3">
             <div
               className={`relative rounded-xl border border-slate-200 bg-white shadow-md transition-all overflow-hidden ${
@@ -555,88 +1218,50 @@ export default function StationReportsPage() {
             </div>
           </TabsContent>
 
-          {/* Tab 2: Charger Point Breakdown for สถานีชาร์จ พญาเสืออีวี */}
-          <TabsContent value="details" className="space-y-4">
+          {/* TAB 3: CSV IMPORTER */}
+          <TabsContent value="upload" className="space-y-4">
             <Card className="border-slate-200 shadow-sm bg-white">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-slate-900">
-                      จุดชาร์จและหัวจ่ายไฟฟ้า: สถานีชาร์จ พญาเสืออีวี
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      ข้อมูลหัวชาร์จ กำลังไฟฟ้า และสถิติการใช้งานของสถานีชาร์จ พญาเสืออีวี พิษณุโลก
-                    </CardDescription>
-                  </div>
-                  <Badge className="bg-blue-600 text-white text-xs">
-                    4 หัวจ่ายออนไลน์
-                  </Badge>
-                </div>
+                <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <UploadCloud className="h-4 w-4 text-emerald-600" />
+                  นำเข้าไฟล์รายงานสถานี (CONNEXT DASHBOARD CSV Import)
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  เมื่อคุณดาวน์โหลดไฟล์สรุปประจำเดือนใหม่จาก CONNEXT DASHBOARD (เช่น พฤศจิกายน หรือ ธันวาคม) คุณสามารถอัปโหลดไฟล์ .csv ได้ที่นี่ ระบบจะอัปเดตตัวเลขและสถิติให้ทันที
+                </CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="py-3 px-4">รหัสหัวชาร์จ</th>
-                        <th className="py-3 px-4">ประเภทหัวชาร์จ</th>
-                        <th className="py-3 px-4">กำลังไฟสูงสุด</th>
-                        <th className="py-3 px-4">พลังงานจ่ายสะสม</th>
-                        <th className="py-3 px-4">รอบชาร์จ</th>
-                        <th className="py-3 px-4">สถานะปัจจุบัน</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-01</td>
-                        <td className="py-3 px-4 font-medium">CCS2 (DC Fast Charge)</td>
-                        <td className="py-3 px-4">120 kW</td>
-                        <td className="py-3 px-4 font-semibold text-blue-600">8,240.20 kWh</td>
-                        <td className="py-3 px-4">284 ครั้ง</td>
-                        <td className="py-3 px-4">
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">
-                            พร้อมใช้งาน (Available)
-                          </Badge>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-02</td>
-                        <td className="py-3 px-4 font-medium">CCS2 (DC Fast Charge)</td>
-                        <td className="py-3 px-4">120 kW</td>
-                        <td className="py-3 px-4 font-semibold text-blue-600">6,110.80 kWh</td>
-                        <td className="py-3 px-4">218 ครั้ง</td>
-                        <td className="py-3 px-4">
-                          <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100">
-                            กำลังชาร์จ (Charging)
-                          </Badge>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-03</td>
-                        <td className="py-3 px-4 font-medium">CHAdeMO (DC Fast Charge)</td>
-                        <td className="py-3 px-4">60 kW</td>
-                        <td className="py-3 px-4 font-semibold text-blue-600">2,350.00 kWh</td>
-                        <td className="py-3 px-4">76 ครั้ง</td>
-                        <td className="py-3 px-4">
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">
-                            พร้อมใช้งาน (Available)
-                          </Badge>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-AC-01</td>
-                        <td className="py-3 px-4 font-medium">Type 2 (AC Normal Charge)</td>
-                        <td className="py-3 px-4">22 kW</td>
-                        <td className="py-3 px-4 font-semibold text-blue-600">1,749.50 kWh</td>
-                        <td className="py-3 px-4">64 ครั้ง</td>
-                        <td className="py-3 px-4">
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">
-                            พร้อมใช้งาน (Available)
-                          </Badge>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+              <CardContent className="space-y-4">
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 transition cursor-pointer relative">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                      <FileSpreadsheet className="h-6 w-6" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      คลิกเพื่อเลือกไฟล์ หรือ ลากไฟล์ .CSV มาวางที่นี่
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      รองรับไฟล์ CSV ตารางสรุปจาก CONNEXT DASHBOARD ของสถานีชาร์จ พญาเสืออีวี
+                    </p>
+                  </div>
+                </div>
+
+                {csvUploadStatus && (
+                  <div className="rounded-lg p-3 bg-slate-100 text-xs text-slate-800 font-mono">
+                    {csvUploadStatus}
+                  </div>
+                )}
+
+                <div className="rounded-lg bg-blue-50/70 p-3 text-xs text-blue-900 border border-blue-200 space-y-1">
+                  <p className="font-semibold">โครงสร้างหัวตาราง CSV ที่ระบบรองรับ:</p>
+                  <p className="font-mono text-[11px] text-blue-800">
+                    วันที่, ชื่อสถานีอัดประจุ, ชื่อเครื่องอัดประจุ, หัวชาร์จ, vcard, start_timestamp, stop_timestamp, daration, หน่วยไฟฟ้า (kWh), รายได้ (บาท)
+                  </p>
                 </div>
               </CardContent>
             </Card>
