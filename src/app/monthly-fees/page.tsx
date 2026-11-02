@@ -63,7 +63,7 @@ export default function MonthlyFeesPage() {
   const [loading, setLoading] = React.useState(true)
   const [openModal, setOpenModal] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
-  const [stationName, setStationName] = React.useState("สถานีชาร์จ กรีนชาร์จ คลองหลวง")
+  const [stationName, setStationName] = React.useState("สถานีชาร์จ พญาเสืออีวี")
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
 
   // New Fee Form State

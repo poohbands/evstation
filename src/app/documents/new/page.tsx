@@ -91,7 +91,7 @@ function CreateDocumentForm() {
   )
   const [billingMonth, setBillingMonth] = React.useState<number>(currentMonth)
   const [billingYear, setBillingYear] = React.useState<number>(currentYear)
-  const [stationName, setStationName] = React.useState<string>("สถานีชาร์จ กรีนชาร์จ คลองหลวง")
+  const [stationName, setStationName] = React.useState<string>("สถานีชาร์จ พญาเสืออีวี")
   const [contractRef, setContractRef] = React.useState<string>("สัญญาเลขที่ EV-PEA-2025/089")
 
   // Customer Info (Default PEA)

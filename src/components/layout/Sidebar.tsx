@@ -44,7 +44,7 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
-    title: "รายงานสถานีชาร์จ",
+    title: "รายงานสถานี พญาเสืออีวี",
     href: "/station-reports",
     icon: BarChart3,
   },

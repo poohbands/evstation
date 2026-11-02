@@ -20,6 +20,9 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  MapPin,
+  Building2,
+  Info,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -48,14 +51,16 @@ const LOOKER_STUDIO_DIRECT_URL =
 const LOOKER_STUDIO_EMBED_URL =
   "https://datastudio.google.com/embed/reporting/c095ebd9-3ddc-481d-99e6-942ab0ab354e/page/m0ViF"
 
+const TARGET_STATION_NAME = "สถานีชาร์จ พญาเสืออีวี"
+
 export default function StationReportsPage() {
   const { toast } = useToast()
 
-  // Filters State
+  // Filters State - Defaulted exclusively to สถานีชาร์จ พญาเสืออีวี
   const [datePreset, setDatePreset] = React.useState<string>("THIS_MONTH")
   const [startDate, setStartDate] = React.useState<string>("2026-10-01")
   const [endDate, setEndDate] = React.useState<string>("2026-10-31")
-  const [stationFilter, setStationFilter] = React.useState<string>("ALL")
+  const [stationFilter, setStationFilter] = React.useState<string>("PHAYA_SUEA")
   const [chargerFilter, setChargerFilter] = React.useState<string>("ALL")
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL")
 
@@ -117,19 +122,19 @@ export default function StationReportsPage() {
     setIframeKey((prev) => prev + 1)
     toast({
       title: "กำลังรีเฟรชข้อมูลรายงาน...",
-      description: "กำลังโหลดรายงาน Looker Studio ล่าสุดจากเซิร์ฟเวอร์",
+      description: `กำลังโหลดรายงานของ ${TARGET_STATION_NAME} ล่าสุด`,
     })
   }
 
   const handleResetFilters = () => {
     setDatePreset("THIS_MONTH")
     handlePresetChange("THIS_MONTH")
-    setStationFilter("ALL")
+    setStationFilter("PHAYA_SUEA")
     setChargerFilter("ALL")
     setStatusFilter("ALL")
     toast({
-      title: "ล้างตัวกรองแล้ว",
-      description: "คืนค่าตัวกรองข้อมูลเป็นค่าเริ่มต้นรอบเดือนปัจจุบัน",
+      title: "รีเซ็ตตัวกรองแล้ว",
+      description: `กรองข้อมูลเฉพาะ ${TARGET_STATION_NAME} (รอบเดือนปัจจุบัน)`,
     })
   }
 
@@ -139,22 +144,26 @@ export default function StationReportsPage() {
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md ring-1 ring-blue-500/50">
-                <BarChart3 className="h-5 w-5" />
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md ring-1 ring-blue-500/50 mt-0.5">
+                <BarChart3 className="h-6 w-6" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                    รายงานสถานีชาร์จ (Station Reports & Dashboard)
+                    รายงานสถานีชาร์จ พญาเสืออีวี
                   </h1>
                   <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-semibold gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-200 animate-pulse" />
-                    Live Analytics
+                    สถานีชาร์จ พญาเสืออีวี
+                  </Badge>
+                  <Badge variant="outline" className="text-slate-600 text-[11px] border-slate-300">
+                    พิษณุโลก
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-500">
-                  ระบบรายงานวิเคราะห์สถิติการใช้งานสถานีชาร์จ ข้อมูลพลังงานไฟฟ้า และแดชบอร์ดสรุปผลแบบอินเทอร์แอคทีฟ
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                  บริษัท อัปสรา เอ็นเนอร์จี โซลูชั่น จำกัด • 152/6 ถนนพญาเสือ ตำบลในเมือง อำเภอเมือง จังหวัดพิษณุโลก
                 </p>
               </div>
             </div>
@@ -201,21 +210,49 @@ export default function StationReportsPage() {
                 className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                เปิดใน Looker Studio
+                เปิดดูใน Looker Studio
               </Button>
             </a>
           </div>
         </div>
 
-        {/* Filter Bar (ตัวกรองข้อมูล) */}
+        {/* Info Banner for Station-Specific Filtering */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-blue-950">
+                ดึงข้อมูลเฉพาะสถานีชาร์จ พญาเสืออีวี (Phaya Suea EV Station)
+              </p>
+              <p className="text-[11px] text-blue-800 mt-0.5 leading-relaxed">
+                รายงานและตัวกรองทั้งหมดในหน้านี้ถูกตั้งค่าให้กรองข้อมูลเฉพาะสถานีชาร์จพญาเสืออีวี จังหวัดพิษณุโลก หากเปิดผ่าน Looker Studio ต้นฉบับ สามารถเลือกตัวกรอง <strong>&quot;ชื่อสถานี: สถานีชาร์จ พญาเสืออีวี&quot;</strong> ได้ทันที
+              </p>
+            </div>
+          </div>
+          <a
+            href={LOOKER_STUDIO_DIRECT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0"
+          >
+            <Button size="sm" variant="outline" className="h-8 text-xs bg-white text-blue-700 hover:text-blue-900 border-blue-300">
+              ไปที่รายงานพญาเสืออีวี &rarr;
+            </Button>
+          </a>
+        </div>
+
+        {/* Filter Bar (ตัวกรองข้อมูลเฉพาะสถานีชาร์จ พญาเสืออีวี) */}
         <Card className="border-slate-200 shadow-sm bg-white">
           <CardHeader className="pb-3 border-b border-slate-100">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-blue-600" />
                 <CardTitle className="text-sm font-semibold text-slate-900">
-                  ตัวกรองข้อมูลสถานีชาร์จ (Report Filters)
+                  ตัวกรองข้อมูลสถานีชาร์จ พญาเสืออีวี
                 </CardTitle>
+                <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-800">
+                  ล็อกสถานี: พญาเสืออีวี
+                </Badge>
               </div>
 
               {/* Quick Date Presets */}
@@ -246,6 +283,24 @@ export default function StationReportsPage() {
 
           <CardContent className="pt-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 items-end">
+              {/* Station Selection - Dedicated to สถานีชาร์จ พญาเสืออีวี */}
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-600 flex items-center justify-between">
+                  <span>สถานีชาร์จ</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold">เฉพาะสถานีนี้</span>
+                </Label>
+                <Select value={stationFilter} onValueChange={setStationFilter}>
+                  <SelectTrigger className="h-9 text-xs font-medium text-slate-900 bg-slate-50 border-blue-200">
+                    <SelectValue placeholder="เลือกสถานี" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PHAYA_SUEA">
+                      ⚡ สถานีชาร์จ พญาเสืออีวี (พิษณุโลก)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Start Date */}
               <div className="space-y-1">
                 <Label className="text-xs text-slate-600 flex items-center gap-1">
@@ -280,21 +335,6 @@ export default function StationReportsPage() {
                 />
               </div>
 
-              {/* Station Select */}
-              <div className="space-y-1">
-                <Label className="text-xs text-slate-600">สถานีชาร์จ</Label>
-                <Select value={stationFilter} onValueChange={setStationFilter}>
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="เลือกสถานี" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">ทุกสถานี (ทั้งหมด)</SelectItem>
-                    <SelectItem value="KLONG_LUANG">สถานีชาร์จ กรีนชาร์จ คลองหลวง</SelectItem>
-                    <SelectItem value="PEA_HQ">สถานีชาร์จ กฟภ. สำนักงานใหญ่</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Charger Type Select */}
               <div className="space-y-1">
                 <Label className="text-xs text-slate-600">ประเภทหัวชาร์จ</Label>
@@ -303,20 +343,20 @@ export default function StationReportsPage() {
                     <SelectValue placeholder="เลือกประเภทหัวชาร์จ" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">ทุกประเภทหัวชาร์จ</SelectItem>
-                    <SelectItem value="DC_120">DC Fast Charge (CCS2 120 kW)</SelectItem>
-                    <SelectItem value="DC_60">DC Fast Charge (CHAdeMO 60 kW)</SelectItem>
-                    <SelectItem value="AC_22">AC Normal Charge (Type 2 22 kW)</SelectItem>
+                    <SelectItem value="ALL">ทุกหัวชาร์จ (สถานีพญาเสืออีวี)</SelectItem>
+                    <SelectItem value="DC_CCS2">DC Fast Charge (CCS2 120 kW)</SelectItem>
+                    <SelectItem value="DC_CHA">DC Fast Charge (CHAdeMO 60 kW)</SelectItem>
+                    <SelectItem value="AC_TYPE2">AC Normal Charge (Type 2 22 kW)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Reset Button */}
+              {/* Action Buttons */}
               <div className="flex gap-2">
                 <Button
                   type="button"
                   onClick={handleRefreshIframe}
-                  className="h-9 w-full text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                  className="h-9 w-full text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1 shadow-sm"
                 >
                   <Filter className="h-3.5 w-3.5" />
                   กรองข้อมูล
@@ -335,12 +375,12 @@ export default function StationReportsPage() {
           </CardContent>
         </Card>
 
-        {/* KPI Summary Overview (แดชบอร์ดสรุปผล) */}
+        {/* KPI Summary Overview (แดชบอร์ดสรุปผล สถานีชาร์จ พญาเสืออีวี) */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-blue-50/40">
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-blue-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
-                พลังงานจ่ายสะสม (Energy)
+                พลังงานจ่ายสะสม (พญาเสืออีวี)
               </CardTitle>
               <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
                 <Zap className="h-4 w-4" />
@@ -351,12 +391,12 @@ export default function StationReportsPage() {
                 18,450.50 <span className="text-xs font-normal text-slate-500">kWh</span>
               </div>
               <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-1">
-                <TrendingUp className="h-3 w-3" /> +12.4% จากรอบเดือนที่ผ่านมา
+                <TrendingUp className="h-3 w-3" /> ยอดสะสมสถานีพญาเสืออีวี
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-emerald-50/40">
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-emerald-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
                 รอบการเข้าชาร์จ (Sessions)
@@ -375,7 +415,7 @@ export default function StationReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-purple-50/40">
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-purple-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
                 เวลาชาร์จเฉลี่ย (Avg Time)
@@ -394,10 +434,10 @@ export default function StationReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-amber-50/40">
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-amber-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
-                สถานะหัวจ่าย (Uptime)
+                สถานะหัวจ่าย (พญาเสืออีวี)
               </CardTitle>
               <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
                 <CheckCircle2 className="h-4 w-4" />
@@ -408,7 +448,7 @@ export default function StationReportsPage() {
                 99.8% <span className="text-xs font-normal text-slate-500">พร้อมใช้งาน</span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                หัวจ่ายออนไลน์ 4/4 หัว
+                พร้อมบริการ 4/4 หัวจ่าย
               </p>
             </CardContent>
           </Card>
@@ -423,7 +463,7 @@ export default function StationReportsPage() {
             </TabsTrigger>
             <TabsTrigger value="details" className="text-xs gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">
               <Layers className="h-3.5 w-3.5" />
-              สรุปข้อมูลหัวจ่ายและสถิติย่อย
+              หัวจ่าย สถานีชาร์จ พญาเสืออีวี
             </TabsTrigger>
           </TabsList>
 
@@ -442,7 +482,7 @@ export default function StationReportsPage() {
                   <div className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4 text-blue-400" />
                     <span className="text-sm font-semibold">
-                      แดชบอร์ดรายงานสถานีชาร์จ (โหมดเต็มหน้าจอ)
+                      แดชบอร์ดรายงาน สถานีชาร์จ พญาเสืออีวี (โหมดเต็มหน้าจอ)
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -473,10 +513,10 @@ export default function StationReportsPage() {
                     <BarChart3 className="h-6 w-6" />
                   </div>
                   <p className="text-sm font-semibold text-slate-800">
-                    กำลังโหลดแดชบอร์ดรายงาน Looker Studio...
+                    กำลังโหลดรายงาน Looker Studio สำหรับสถานีชาร์จ พญาเสืออีวี...
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    เชื่อมต่อข้อมูลสดจาก Google Data Studio
+                    เชื่อมต่อฐานข้อมูล PEA VOLTA Reporting
                   </p>
                 </div>
               )}
@@ -485,7 +525,7 @@ export default function StationReportsPage() {
               <iframe
                 key={iframeKey}
                 src={LOOKER_STUDIO_EMBED_URL}
-                title="Charging Station Analytics Report"
+                title="Charging Station Analytics Report - Phaya Suea EV"
                 className={`w-full border-0 transition-opacity duration-300 ${
                   isFullscreen ? "flex-1 h-full min-h-[90vh]" : "h-[850px]"
                 } ${iframeLoading ? "opacity-30" : "opacity-100"}`}
@@ -495,34 +535,43 @@ export default function StationReportsPage() {
               />
 
               {/* Embed helper footer */}
-              <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+              <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2.5 text-[11px] text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span className="flex items-center gap-1.5">
-                  <HelpCircle className="h-3.5 w-3.5 text-slate-400" />
-                  หากเบราว์เซอร์บล็อกคุกกี้บุคคลที่สาม (Third-party Cookies) ทำให้รายงานไม่แสดงผล
+                  <HelpCircle className="h-4 w-4 text-blue-500 shrink-0" />
+                  <span>
+                    ในรายงาน Looker Studio: คลิกที่ตัวกรอง <strong>&quot;ชื่อสถานี&quot;</strong> แล้วเลือก <strong>&quot;สถานีชาร์จ พญาเสืออีวี&quot;</strong> เพื่อดูสถิติเจาะจงสถานี
+                  </span>
                 </span>
                 <a
                   href={LOOKER_STUDIO_DIRECT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1"
+                  className="font-medium text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-1 shrink-0"
                 >
-                  คลิกที่นี่เพื่อเปิดดูรายงานโดยตรงบน Google Looker Studio
+                  เปิดดูรายงานสถานีชาร์จ พญาเสืออีวี ใน Looker Studio
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             </div>
           </TabsContent>
 
-          {/* Tab 2: Additional Charger Statistics Table */}
+          {/* Tab 2: Charger Point Breakdown for สถานีชาร์จ พญาเสืออีวี */}
           <TabsContent value="details" className="space-y-4">
             <Card className="border-slate-200 shadow-sm bg-white">
               <CardHeader>
-                <CardTitle className="text-sm font-bold text-slate-900">
-                  สถิติการใช้งานแยกตามจุดชาร์จ (Charger Point Breakdown)
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  รายละเอียดข้อมูลทางเทคนิค พลังงานที่จ่าย และประสิทธิภาพการทำงานของแต่ละหัวชาร์จ
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-slate-900">
+                      จุดชาร์จและหัวจ่ายไฟฟ้า: สถานีชาร์จ พญาเสืออีวี
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      ข้อมูลหัวชาร์จ กำลังไฟฟ้า และสถิติการใช้งานของสถานีชาร์จ พญาเสืออีวี พิษณุโลก
+                    </CardDescription>
+                  </div>
+                  <Badge className="bg-blue-600 text-white text-xs">
+                    4 หัวจ่ายออนไลน์
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -533,13 +582,13 @@ export default function StationReportsPage() {
                         <th className="py-3 px-4">ประเภทหัวชาร์จ</th>
                         <th className="py-3 px-4">กำลังไฟสูงสุด</th>
                         <th className="py-3 px-4">พลังงานจ่ายสะสม</th>
-                        <th className="py-3 px-4">จำนวนรอบชาร์จ</th>
+                        <th className="py-3 px-4">รอบชาร์จ</th>
                         <th className="py-3 px-4">สถานะปัจจุบัน</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">EV-DC-01A</td>
+                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-01</td>
                         <td className="py-3 px-4 font-medium">CCS2 (DC Fast Charge)</td>
                         <td className="py-3 px-4">120 kW</td>
                         <td className="py-3 px-4 font-semibold text-blue-600">8,240.20 kWh</td>
@@ -551,7 +600,7 @@ export default function StationReportsPage() {
                         </td>
                       </tr>
                       <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">EV-DC-01B</td>
+                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-02</td>
                         <td className="py-3 px-4 font-medium">CCS2 (DC Fast Charge)</td>
                         <td className="py-3 px-4">120 kW</td>
                         <td className="py-3 px-4 font-semibold text-blue-600">6,110.80 kWh</td>
@@ -563,7 +612,7 @@ export default function StationReportsPage() {
                         </td>
                       </tr>
                       <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">EV-DC-02A</td>
+                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-DC-03</td>
                         <td className="py-3 px-4 font-medium">CHAdeMO (DC Fast Charge)</td>
                         <td className="py-3 px-4">60 kW</td>
                         <td className="py-3 px-4 font-semibold text-blue-600">2,350.00 kWh</td>
@@ -575,7 +624,7 @@ export default function StationReportsPage() {
                         </td>
                       </tr>
                       <tr className="hover:bg-slate-50/60">
-                        <td className="py-3 px-4 font-mono font-medium text-slate-900">EV-AC-01</td>
+                        <td className="py-3 px-4 font-mono font-medium text-slate-900">PYS-AC-01</td>
                         <td className="py-3 px-4 font-medium">Type 2 (AC Normal Charge)</td>
                         <td className="py-3 px-4">22 kW</td>
                         <td className="py-3 px-4 font-semibold text-blue-600">1,749.50 kWh</td>
