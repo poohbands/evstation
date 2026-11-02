@@ -479,14 +479,13 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="taxId">
-                      เลขประจำตัวผู้เสียภาษี (13 หลัก) <span className="text-red-500">*</span>
+                      เลขประจำตัวผู้เสียภาษี <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="taxId"
                       value={formData.taxId}
                       onChange={(e) => handleChange("taxId", e.target.value)}
                       placeholder="0105564012345"
-                      maxLength={13}
                       required
                     />
                   </div>
