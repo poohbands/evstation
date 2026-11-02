@@ -31,6 +31,12 @@ import {
   ArrowUpDown,
   Car,
   Check,
+  Sunrise,
+  Sunset,
+  Sun,
+  Moon,
+  Flame,
+  PieChart,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -96,6 +102,10 @@ export default function StationReportsPage() {
   const [stationFilter, setStationFilter] = React.useState<string>("PHAYA_SUEA")
   const [chargerFilter, setChargerFilter] = React.useState<string>("ALL")
   const [searchQuery, setSearchQuery] = React.useState<string>("")
+
+  // Chart Metric Mode (Sessions vs kWh)
+  const [chartMetric, setChartMetric] = React.useState<"sessions" | "kwh">("sessions")
+  const [hoveredHour, setHoveredHour] = React.useState<number | null>(null)
 
   // UI State
   const [isFullscreen, setIsFullscreen] = React.useState<boolean>(false)
@@ -275,6 +285,107 @@ export default function StationReportsPage() {
       avgRatePerKwh,
       connectors: connectorsMap,
       dailyList,
+    }
+  }, [filteredTransactions])
+
+  // Hourly and Time-of-Day Peak Distribution
+  const timeDistribution = React.useMemo(() => {
+    // 24 Hours (00:00 - 23:59)
+    const hours = Array.from({ length: 24 }, (_, i) => ({
+      hour: i,
+      label: `${String(i).padStart(2, "0")}:00`,
+      fullLabel: `${String(i).padStart(2, "0")}:00 - ${String(i).padStart(2, "0")}:59 น.`,
+      count: 0,
+      kwh: 0,
+      revenue: 0,
+      ccs1Count: 0,
+      ccs2Count: 0,
+      ccs1Kwh: 0,
+      ccs2Kwh: 0,
+    }))
+
+    // 4 Time Periods
+    const periods = {
+      morning: {
+        id: "morning",
+        name: "ช่วงเช้า",
+        timeRange: "06:00 - 11:59 น.",
+        count: 0,
+        kwh: 0,
+        revenue: 0,
+        hours: [6, 7, 8, 9, 10, 11],
+      },
+      afternoon: {
+        id: "afternoon",
+        name: "ช่วงบ่าย",
+        timeRange: "12:00 - 16:59 น.",
+        count: 0,
+        kwh: 0,
+        revenue: 0,
+        hours: [12, 13, 14, 15, 16],
+      },
+      evening: {
+        id: "evening",
+        name: "ช่วงเย็น-ค่ำ (Peak)",
+        timeRange: "17:00 - 21:59 น.",
+        count: 0,
+        kwh: 0,
+        revenue: 0,
+        hours: [17, 18, 19, 20, 21],
+      },
+      night: {
+        id: "night",
+        name: "ช่วงดึก-เช้ามืด (Off-Peak)",
+        timeRange: "22:00 - 05:59 น.",
+        count: 0,
+        kwh: 0,
+        revenue: 0,
+        hours: [22, 23, 0, 1, 2, 3, 4, 5],
+      },
+    }
+
+    filteredTransactions.forEach((tx) => {
+      let h = -1
+      const match = tx.startTime.match(/(\d{1,2}):\d{2}/)
+      if (match) {
+        h = parseInt(match[1], 10)
+      }
+      if (h >= 0 && h < 24) {
+        hours[h].count += 1
+        hours[h].kwh += tx.kwh
+        hours[h].revenue += tx.revenue
+
+        if (tx.connector === "CCS2-1") {
+          hours[h].ccs1Count += 1
+          hours[h].ccs1Kwh += tx.kwh
+        } else {
+          hours[h].ccs2Count += 1
+          hours[h].ccs2Kwh += tx.kwh
+        }
+
+        for (const key of Object.keys(periods) as (keyof typeof periods)[]) {
+          if (periods[key].hours.includes(h)) {
+            periods[key].count += 1
+            periods[key].kwh += tx.kwh
+            periods[key].revenue += tx.revenue
+          }
+        }
+      }
+    })
+
+    const maxCount = Math.max(1, ...hours.map((h) => h.count))
+    const maxKwh = Math.max(1, ...hours.map((h) => h.kwh))
+    const topHours = [...hours]
+      .filter((h) => h.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3)
+
+    return {
+      hours,
+      periods,
+      maxCount,
+      maxKwh,
+      topHours,
     }
   }, [filteredTransactions])
 
@@ -833,8 +944,417 @@ export default function StationReportsPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* TAB 1: DATA ANALYTICS (REAL PHAYA SUEA DATA) */}
+          {/* TAB 1: DATA ANALYTICS & PEAK CHARGING HOURS GRAPH */}
           <TabsContent value="analytics" className="space-y-6">
+            {/* NEW SECTION: PEAK CHARGING HOURS GRAPH */}
+            <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+              <CardHeader className="pb-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-amber-50/40">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                        <Flame className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <span>กราฟวิเคราะห์ช่วงเวลาที่มีการชาร์จบ่อย (Peak Charging Hours)</span>
+                          {timeDistribution.topHours.length > 0 && (
+                            <Badge className="bg-amber-500 text-white text-[10px] py-0 px-2 font-medium">
+                              พีคสูงสุด: {timeDistribution.topHours[0].label} น. ({timeDistribution.topHours[0].count} ครั้ง)
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          วิเคราะห์ความหนาแน่นของการเข้าชาร์จตลอด 24 ชั่วโมง และช่วงเวลาที่มีการใช้งานสูงสุดของสถานีชาร์จ พญาเสืออีวี
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metric Toggle Buttons */}
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("sessions")}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                        chartMetric === "sessions"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      จำนวนรอบ (ครั้ง)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric("kwh")}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                        chartMetric === "kwh"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      พลังงานจ่าย (kWh)
+                    </button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-5 space-y-6">
+                {/* 4 Time-of-Day Period Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Period: เช้า */}
+                  <div className="rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-white p-3.5 transition hover:shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                        <Sunrise className="h-4 w-4 text-amber-600" />
+                        <span>ช่วงเช้า</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300">
+                        06:00 - 11:59
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xl font-bold text-slate-900">
+                        {timeDistribution.periods.morning.count}{" "}
+                        <span className="text-xs font-normal text-slate-500">ครั้ง</span>
+                      </span>
+                      <span className="text-xs font-semibold text-amber-700">
+                        {stats.totalSessions > 0
+                          ? Math.round(
+                              (timeDistribution.periods.morning.count / stats.totalSessions) *
+                                100
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
+                      <span>พลังงานจ่าย:</span>
+                      <span className="font-medium text-slate-800">
+                        {timeDistribution.periods.morning.kwh.toLocaleString("th-TH", {
+                          maximumFractionDigits: 1,
+                        })}{" "}
+                        kWh
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Period: บ่าย */}
+                  <div className="rounded-xl border border-blue-200/80 bg-gradient-to-br from-blue-50/60 to-white p-3.5 transition hover:shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-900">
+                        <Sun className="h-4 w-4 text-blue-600" />
+                        <span>ช่วงบ่าย</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-blue-700 border-blue-300">
+                        12:00 - 16:59
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xl font-bold text-slate-900">
+                        {timeDistribution.periods.afternoon.count}{" "}
+                        <span className="text-xs font-normal text-slate-500">ครั้ง</span>
+                      </span>
+                      <span className="text-xs font-semibold text-blue-700">
+                        {stats.totalSessions > 0
+                          ? Math.round(
+                              (timeDistribution.periods.afternoon.count /
+                                stats.totalSessions) *
+                                100
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
+                      <span>พลังงานจ่าย:</span>
+                      <span className="font-medium text-slate-800">
+                        {timeDistribution.periods.afternoon.kwh.toLocaleString("th-TH", {
+                          maximumFractionDigits: 1,
+                        })}{" "}
+                        kWh
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Period: เย็น-ค่ำ (Highlight Peak) */}
+                  <div className="rounded-xl border-2 border-amber-500 bg-gradient-to-br from-amber-50 to-orange-50/40 p-3.5 transition shadow-sm relative overflow-hidden">
+                    <div className="absolute -right-3 -top-3 h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center pointer-events-none">
+                      <Flame className="h-6 w-6 text-amber-500/30" />
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
+                        <Sunset className="h-4 w-4 text-amber-600" />
+                        <span>ช่วงเย็น-ค่ำ</span>
+                      </div>
+                      <Badge className="bg-amber-500 text-white text-[10px] py-0 px-1.5">
+                        🔥 พีคสูงสุด
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xl font-bold text-amber-950">
+                        {timeDistribution.periods.evening.count}{" "}
+                        <span className="text-xs font-normal text-slate-600">ครั้ง</span>
+                      </span>
+                      <span className="text-xs font-bold text-amber-700">
+                        {stats.totalSessions > 0
+                          ? Math.round(
+                              (timeDistribution.periods.evening.count / stats.totalSessions) *
+                                100
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-amber-900/80 flex justify-between font-medium">
+                      <span>พลังงานจ่าย:</span>
+                      <span className="font-bold text-amber-950">
+                        {timeDistribution.periods.evening.kwh.toLocaleString("th-TH", {
+                          maximumFractionDigits: 1,
+                        })}{" "}
+                        kWh
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Period: ดึก-เช้ามืด */}
+                  <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/50 to-white p-3.5 transition hover:shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-900">
+                        <Moon className="h-4 w-4 text-indigo-600" />
+                        <span>ช่วงดึก-เช้ามืด</span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-indigo-700 border-indigo-300">
+                        22:00 - 05:59
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xl font-bold text-slate-900">
+                        {timeDistribution.periods.night.count}{" "}
+                        <span className="text-xs font-normal text-slate-500">ครั้ง</span>
+                      </span>
+                      <span className="text-xs font-semibold text-indigo-700">
+                        {stats.totalSessions > 0
+                          ? Math.round(
+                              (timeDistribution.periods.night.count / stats.totalSessions) *
+                                100
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 flex justify-between">
+                      <span>พลังงานจ่าย:</span>
+                      <span className="font-medium text-slate-800">
+                        {timeDistribution.periods.night.kwh.toLocaleString("th-TH", {
+                          maximumFractionDigits: 1,
+                        })}{" "}
+                        kWh
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 24-Hour Bar Chart Section */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 pb-1">
+                    <span className="font-medium">
+                      การกระจายตัวของการชาร์จตลอด 24 ชั่วโมง (00:00 - 23:59 น.)
+                    </span>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm bg-blue-600 inline-block" />
+                        หัวชาร์จ CCS2-1
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm bg-purple-600 inline-block" />
+                        หัวชาร์จ CCS2-2
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="h-2.5 w-2.5 rounded-sm bg-amber-400 inline-block" />
+                        ช่วงหนาแน่นสูง (Peak)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Chart Canvas */}
+                  <div className="relative rounded-xl border border-slate-200 bg-slate-50/50 p-4 pt-6">
+                    {/* Background grid lines */}
+                    <div className="absolute inset-x-4 top-6 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
+                      <div className="border-b border-dashed border-slate-300 w-full" />
+                      <div className="border-b border-dashed border-slate-300 w-full" />
+                      <div className="border-b border-dashed border-slate-300 w-full" />
+                    </div>
+
+                    {/* Bars Container */}
+                    <div className="relative h-56 flex items-end justify-between gap-1 sm:gap-2">
+                      {timeDistribution.hours.map((h) => {
+                        const val = chartMetric === "sessions" ? h.count : h.kwh
+                        const max = chartMetric === "sessions" ? timeDistribution.maxCount : timeDistribution.maxKwh
+                        const heightPercent = max > 0 ? Math.max(val > 0 ? 8 : 2, (val / max) * 100) : 2
+                        const isTop = timeDistribution.topHours.some((th) => th.hour === h.hour && th.count > 0)
+                        const isHovered = hoveredHour === h.hour
+
+                        // Split by connector
+                        const ccs1Val = chartMetric === "sessions" ? h.ccs1Count : h.ccs1Kwh
+                        const ccs2Val = chartMetric === "sessions" ? h.ccs2Count : h.ccs2Kwh
+                        const ccs1Ratio = val > 0 ? (ccs1Val / val) * 100 : 50
+                        const ccs2Ratio = val > 0 ? (ccs2Val / val) * 100 : 50
+
+                        return (
+                          <div
+                            key={h.hour}
+                            className="flex-1 flex flex-col items-center h-full justify-end group relative cursor-pointer"
+                            onMouseEnter={() => setHoveredHour(h.hour)}
+                            onMouseLeave={() => setHoveredHour(null)}
+                          >
+                            {/* Hover Tooltip Popup */}
+                            {isHovered && (
+                              <div className="absolute bottom-full mb-2 z-30 w-44 rounded-lg bg-slate-900 text-white p-2.5 text-[11px] shadow-xl pointer-events-none -translate-x-1/2 left-1/2 transition-all">
+                                <div className="font-bold border-b border-slate-700 pb-1 mb-1 text-amber-400 flex items-center justify-between">
+                                  <span>{h.fullLabel}</span>
+                                  {isTop && (
+                                    <Badge className="bg-amber-500 text-[9px] py-0 px-1 text-white">
+                                      PEAK
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="space-y-0.5 text-slate-200">
+                                  <div className="flex justify-between">
+                                    <span>จำนวนรอบ:</span>
+                                    <span className="font-bold text-white">{h.count} ครั้ง</span>
+                                  </div>
+                                  <div className="flex justify-between text-blue-300">
+                                    <span>• CCS2-1:</span>
+                                    <span>{h.ccs1Count} ครั้ง ({h.ccs1Kwh.toFixed(1)} kWh)</span>
+                                  </div>
+                                  <div className="flex justify-between text-purple-300">
+                                    <span>• CCS2-2:</span>
+                                    <span>{h.ccs2Count} ครั้ง ({h.ccs2Kwh.toFixed(1)} kWh)</span>
+                                  </div>
+                                  <div className="flex justify-between pt-1 border-t border-slate-800 font-semibold text-emerald-400">
+                                    <span>พลังงานรวม:</span>
+                                    <span>{h.kwh.toFixed(1)} kWh</span>
+                                  </div>
+                                  <div className="flex justify-between text-amber-300">
+                                    <span>รายได้รวม:</span>
+                                    <span>฿{h.revenue.toFixed(0)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Value Label above bar */}
+                            {val > 0 && (
+                              <span
+                                className={`text-[9px] font-semibold mb-1 transition ${
+                                  isTop ? "text-amber-600 font-bold" : "text-slate-500"
+                                }`}
+                              >
+                                {chartMetric === "sessions" ? val : Math.round(val)}
+                              </span>
+                            )}
+
+                            {/* Stacked Vertical Bar */}
+                            <div
+                              className={`w-full rounded-t-md transition-all duration-300 overflow-hidden flex flex-col justify-end ${
+                                val === 0
+                                  ? "bg-slate-200/60 h-1"
+                                  : isTop
+                                  ? "ring-2 ring-amber-400 shadow-md"
+                                  : "hover:opacity-90"
+                              }`}
+                              style={{ height: `${heightPercent}%` }}
+                            >
+                              {val > 0 ? (
+                                <>
+                                  {/* CCS2-2 (Top Stack - Purple) */}
+                                  <div
+                                    className="w-full bg-purple-600 transition-all"
+                                    style={{ height: `${ccs2Ratio}%` }}
+                                    title={`CCS2-2: ${ccs2Val}`}
+                                  />
+                                  {/* CCS2-1 (Bottom Stack - Blue) */}
+                                  <div
+                                    className="w-full bg-blue-600 transition-all"
+                                    style={{ height: `${ccs1Ratio}%` }}
+                                    title={`CCS2-1: ${ccs1Val}`}
+                                  />
+                                </>
+                              ) : null}
+                            </div>
+
+                            {/* Hour Label below bar */}
+                            <span
+                              className={`mt-2 text-[9px] font-mono transition ${
+                                isTop
+                                  ? "text-amber-600 font-bold scale-110"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {String(h.hour).padStart(2, "0")}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top 3 Rush Hours & Strategic Insights */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  <div className="rounded-lg bg-amber-50/70 border border-amber-200 p-3 text-xs text-amber-950">
+                    <p className="font-bold flex items-center gap-1.5 text-amber-900 mb-1">
+                      <Flame className="h-4 w-4 text-amber-600" />
+                      3 อันดับชั่วโมงที่รถเข้าชาร์จมากที่สุด
+                    </p>
+                    <div className="space-y-1 mt-2 text-[11px]">
+                      {timeDistribution.topHours.map((th, idx) => (
+                        <div
+                          key={th.hour}
+                          className="flex items-center justify-between py-0.5 border-b border-amber-200/50 last:border-none"
+                        >
+                          <span className="font-medium">
+                            {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"} {th.label} - {th.hour}:59 น.
+                          </span>
+                          <span className="font-bold text-slate-900">
+                            {th.count} ครั้ง ({th.kwh.toFixed(1)} kWh)
+                          </span>
+                        </div>
+                      ))}
+                      {timeDistribution.topHours.length === 0 && (
+                        <p className="text-slate-500">ไม่มีข้อมูลในช่วงเวลาที่เลือก</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-blue-50/70 border border-blue-200 p-3 text-xs text-blue-950">
+                    <p className="font-bold flex items-center gap-1.5 text-blue-900 mb-1">
+                      <Clock className="h-4 w-4 text-blue-600" />
+                      พฤติกรรมการใช้งานสถานีพญาเสืออีวี
+                    </p>
+                    <p className="text-[11px] text-blue-900/90 leading-relaxed mt-1">
+                      • ผู้ใช้บริการนิยมเข้าชาร์จมากที่สุดช่วง <strong>17:00 - 20:00 น.</strong> (หลังเลิกงานและเดินทางกลับ)
+                      <br />
+                      • มีการใช้งานหนาแน่นช่วงพักเที่ยง <strong>12:00 - 13:00 น.</strong> และช่วงเช้า <strong>10:00 - 11:00 น.</strong>
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-emerald-50/70 border border-emerald-200 p-3 text-xs text-emerald-950">
+                    <p className="font-bold flex items-center gap-1.5 text-emerald-900 mb-1">
+                      <Zap className="h-4 w-4 text-emerald-600" />
+                      คำแนะนำการบริหารจัดการหัวจ่าย
+                    </p>
+                    <p className="text-[11px] text-emerald-900/90 leading-relaxed mt-1">
+                      • ช่วงเวลา <strong>17:00 - 21:00 น.</strong> ควรตรวจสอบให้หัวจ่ายทั้ง CCS2-1 และ CCS2-2 ออนไลน์เต็ม 100%
+                      <br />
+                      • ช่วงดึก <strong>22:00 - 05:00 น.</strong> การใช้งานเบาบาง (8%) เหมาะแก่การจัดโปรโมชันราคา Off-Peak
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Charger Connector Breakdown Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Connector CCS2-1 */}
