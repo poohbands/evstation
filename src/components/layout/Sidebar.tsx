@@ -20,6 +20,7 @@ import {
   Wrench,
   Database,
   History,
+  BarChart3,
 } from "lucide-react"
 import { cn, PEA_GOOGLE_DRIVE_URL } from "@/lib/utils"
 import { useAuth } from "@/components/auth/AuthContext"
@@ -41,6 +42,11 @@ const navItems: NavItem[] = [
     title: "แดชบอร์ด",
     href: "/",
     icon: LayoutDashboard,
+  },
+  {
+    title: "รายงานสถานีชาร์จ",
+    href: "/station-reports",
+    icon: BarChart3,
   },
   {
     title: "เอกสารทั้งหมด",
