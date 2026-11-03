@@ -783,8 +783,8 @@ export default function StationReportsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">ทุกหัวชาร์จ (CCS2-1 & CCS2-2)</SelectItem>
-                    <SelectItem value="CCS2-1">เฉพาะหัวชาร์จ CCS2-1 (120 kW)</SelectItem>
-                    <SelectItem value="CCS2-2">เฉพาะหัวชาร์จ CCS2-2 (120 kW)</SelectItem>
+                    <SelectItem value="CCS2-1">เฉพาะหัวชาร์จ CCS2-1 (180 kW)</SelectItem>
+                    <SelectItem value="CCS2-2">เฉพาะหัวชาร์จ CCS2-2 (180 kW)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1370,7 +1370,7 @@ export default function StationReportsPage() {
                           หัวชาร์จ CCS2-1 (DC Fast Charge)
                         </CardTitle>
                         <CardDescription className="text-[11px]">
-                          กำลังไฟสูงสุด 120 kW • สถานีชาร์จ พญาเสืออีวี
+                          กำลังไฟสูงสุด 180 kW • สถานีชาร์จ พญาเสืออีวี
                         </CardDescription>
                       </div>
                     </div>
@@ -1440,7 +1440,7 @@ export default function StationReportsPage() {
                           หัวชาร์จ CCS2-2 (DC Fast Charge)
                         </CardTitle>
                         <CardDescription className="text-[11px]">
-                          กำลังไฟสูงสุด 120 kW • สถานีชาร์จ พญาเสืออีวี
+                          กำลังไฟสูงสุด 180 kW • สถานีชาร์จ พญาเสืออีวี
                         </CardDescription>
                       </div>
                     </div>
