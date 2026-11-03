@@ -118,39 +118,89 @@ export default function StationReportsPage() {
   const itemsPerPage = 15
 
   // Fetch data automatically from API when opening web page
-  const fetchLiveTransactions = React.useCallback(async (silent = false) => {
-    try {
-      setIsSyncing(true)
-      const res = await fetch("/api/station-reports")
-      if (res.ok) {
-        const result = await res.json()
-        if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-          setTransactions(result.data)
-          const nowStr = new Date().toLocaleTimeString("th-TH", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })
-          setLastSyncTime(`วันนี้ ${nowStr} น.`)
-          if (!silent) {
-            toast({
-              title: "ซิงค์ข้อมูลสถานีสำเร็จ",
-              description: `ดึงข้อมูลอัตโนมัติ ${result.data.length} รายการ ตรงกับ CONNEXT DASHBOARD แล้ว`,
+  const fetchLiveTransactions = React.useCallback(
+    async (silent = false, forceRefresh = false) => {
+      try {
+        setIsSyncing(true)
+        const url = `/api/station-reports${forceRefresh ? "?refresh=true" : ""}`
+        const res = await fetch(url, { cache: "no-store" })
+        if (res.ok) {
+          const result = await res.json()
+          if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+            setTransactions(result.data)
+            const nowStr = new Date().toLocaleTimeString("th-TH", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
             })
+            setLastSyncTime(`วันนี้ ${nowStr} น.`)
+            if (!silent) {
+              toast({
+                title: "ซิงค์ข้อมูลสถานีสำเร็จ",
+                description: `ดึงข้อมูลอัตโนมัติ ${result.data.length} รายการ ตรงกับ CONNEXT DASHBOARD แล้ว`,
+              })
+            }
           }
         }
+      } catch (e) {
+        console.warn("Auto-sync fallback to bundled data:", e)
+      } finally {
+        setIsSyncing(false)
       }
-    } catch (e) {
-      console.warn("Auto-sync fallback to bundled data:", e)
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [toast])
+    },
+    [toast]
+  )
 
-  // Automatically sync when opening web page
+  // Automatically sync from Looker Studio when opening web page
   React.useEffect(() => {
-    fetchLiveTransactions(true)
+    fetchLiveTransactions(true, true)
   }, [fetchLiveTransactions])
+
+  // Dynamic counts for banners and presets
+  const novCount = React.useMemo(
+    () => transactions.filter((t) => t.dateIso?.startsWith("2026-11")).length,
+    [transactions]
+  )
+  const octCount = React.useMemo(
+    () => transactions.filter((t) => t.dateIso?.startsWith("2026-10")).length,
+    [transactions]
+  )
+  const novKwh = React.useMemo(
+    () =>
+      Math.round(
+        transactions
+          .filter((t) => t.dateIso?.startsWith("2026-11"))
+          .reduce((sum, t) => sum + t.kwh, 0) * 100
+      ) / 100,
+    [transactions]
+  )
+  const novRev = React.useMemo(
+    () =>
+      Math.round(
+        transactions
+          .filter((t) => t.dateIso?.startsWith("2026-11"))
+          .reduce((sum, t) => sum + t.revenue, 0) * 100
+      ) / 100,
+    [transactions]
+  )
+  const octKwh = React.useMemo(
+    () =>
+      Math.round(
+        transactions
+          .filter((t) => t.dateIso?.startsWith("2026-10"))
+          .reduce((sum, t) => sum + t.kwh, 0) * 100
+      ) / 100,
+    [transactions]
+  )
+  const octRev = React.useMemo(
+    () =>
+      Math.round(
+        transactions
+          .filter((t) => t.dateIso?.startsWith("2026-10"))
+          .reduce((sum, t) => sum + t.revenue, 0) * 100
+      ) / 100,
+    [transactions]
+  )
 
   // Quick preset dates handler
   const handlePresetChange = (preset: string) => {
@@ -171,14 +221,16 @@ export default function StationReportsPage() {
         setEndDate("2026-11-30")
         break
       case "TODAY": {
-        const todayIso = "2026-11-02"
+        const todayIso = new Date().toISOString().slice(0, 10)
         setStartDate(todayIso)
         setEndDate(todayIso)
         break
       }
       case "LAST_7_DAYS": {
-        setStartDate("2026-10-27")
-        setEndDate("2026-11-02")
+        const now = new Date()
+        const past = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        setStartDate(past.toISOString().slice(0, 10))
+        setEndDate(now.toISOString().slice(0, 10))
         break
       }
       default:
@@ -407,7 +459,7 @@ export default function StationReportsPage() {
   }, [filteredTransactions, txPage, itemsPerPage])
 
   const handleRefreshAll = () => {
-    fetchLiveTransactions(false)
+    fetchLiveTransactions(false, true)
     setIframeLoading(true)
     setIframeKey((prev) => prev + 1)
   }
@@ -651,14 +703,14 @@ export default function StationReportsPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-emerald-950">
-                  ระบบดึงข้อมูลอัตโนมัติเมื่อเปิดเว็บ (Auto-Sync Active)
+                  ระบบดึงข้อมูลอัตโนมัติเมื่อเปิดเว็บ (Auto-Sync จาก Looker Studio)
                 </span>
                 <Badge className="bg-emerald-600 text-white text-[10px] py-0 px-2 font-normal">
-                  ข้อมูลตรงกับ CONNEXT DASHBOARD (182 ครั้ง)
+                  ข้อมูลตรงกับ CONNEXT DASHBOARD ({transactions.length} ครั้ง)
                 </Badge>
               </div>
               <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
-                อัปเดตข้อมูลล่าสุดเมื่อ: <strong>{lastSyncTime}</strong> • เดือนพฤศจิกายน 2569 มีการชาร์จสะสม <strong>11 ครั้ง</strong> (244.07 kWh | ฿1,830.52) • เดือนตุลาคม 2569 มี <strong>171 ครั้ง</strong> (4,257.02 kWh | ฿31,927.72)
+                อัปเดตข้อมูลล่าสุดเมื่อ: <strong>{lastSyncTime}</strong> • เดือนพฤศจิกายน 2569 มีการชาร์จสะสม <strong>{novCount} ครั้ง</strong> ({novKwh.toLocaleString("th-TH")} kWh | ฿{novRev.toLocaleString("th-TH", { minimumFractionDigits: 2 })}) • เดือนตุลาคม 2569 มี <strong>{octCount} ครั้ง</strong> ({octKwh.toLocaleString("th-TH")} kWh | ฿{octRev.toLocaleString("th-TH", { minimumFractionDigits: 2 })})
               </p>
             </div>
           </div>
@@ -673,7 +725,7 @@ export default function StationReportsPage() {
                   : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100"
               }`}
             >
-              ดู พ.ย. 69 (11 ครั้ง)
+              ดู พ.ย. 69 ({novCount} ครั้ง)
             </Button>
             <Button
               size="sm"
@@ -685,7 +737,7 @@ export default function StationReportsPage() {
                   : "bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100"
               }`}
             >
-              ดู ต.ค. 69 (171 ครั้ง)
+              ดู ต.ค. 69 ({octCount} ครั้ง)
             </Button>
           </div>
         </div>
@@ -707,10 +759,10 @@ export default function StationReportsPage() {
               {/* Quick Date Presets */}
               <div className="flex flex-wrap gap-1">
                 {[
-                  { id: "NOV_2026", label: "พฤศจิกายน 2569 (11 ครั้ง)" },
-                  { id: "OCT_2026", label: "ตุลาคม 2569 (171 ครั้ง)" },
-                  { id: "ALL_DATA", label: "ข้อมูลทั้งหมด (182 ครั้ง)" },
-                  { id: "TODAY", label: "วันนี้ (2 พ.ย. 69)" },
+                  { id: "NOV_2026", label: `พฤศจิกายน 2569 (${novCount} ครั้ง)` },
+                  { id: "OCT_2026", label: `ตุลาคม 2569 (${octCount} ครั้ง)` },
+                  { id: "ALL_DATA", label: `ข้อมูลทั้งหมด (${transactions.length} ครั้ง)` },
+                  { id: "TODAY", label: "วันนี้" },
                   { id: "LAST_7_DAYS", label: "7 วันล่าสุด" },
                 ].map((preset) => (
                   <button

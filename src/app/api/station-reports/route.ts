@@ -1,12 +1,39 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import defaultTransactions from "@/data/phayaSueaTransactions.json"
+import {
+  fetchLookerStudioTransactions,
+  syncTransactionsToDatabase,
+} from "@/lib/looker-service"
+
+// In-memory cache throttle: sync at most once every 60 seconds unless ?refresh=true is provided
+let lastLiveSyncTime = 0
+const AUTO_SYNC_INTERVAL_MS = 60 * 1000
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const month = searchParams.get("month") // e.g. "2026-11"
     const station = searchParams.get("station") || "สถานีชาร์จ พญาเสืออีวี"
+    const forceRefresh = searchParams.get("refresh") === "true"
+
+    const shouldSyncFromLooker =
+      forceRefresh || Date.now() - lastLiveSyncTime > AUTO_SYNC_INTERVAL_MS
+
+    if (shouldSyncFromLooker) {
+      try {
+        const liveTxs = await fetchLookerStudioTransactions(500, 6000)
+        if (liveTxs && liveTxs.length > 0) {
+          lastLiveSyncTime = Date.now()
+          // Asynchronously upsert records to Neon DB
+          syncTransactionsToDatabase(liveTxs).catch((err) =>
+            console.error("Error in background database upsert:", err)
+          )
+        }
+      } catch (syncErr: any) {
+        console.warn("Looker Studio automatic fetch notice:", syncErr.message)
+      }
+    }
 
     let where: any = {}
     if (station && station !== "ALL") {
@@ -21,19 +48,18 @@ export async function GET(req: NextRequest) {
       orderBy: [{ dateIso: "desc" }, { startTime: "desc" }],
     })
 
-    // If database has records, return them; otherwise return bundled default
-    const data = dbTransactions.length > 0 ? dbTransactions : defaultTransactions
+    const data =
+      dbTransactions.length > 0 ? dbTransactions : defaultTransactions
 
     return NextResponse.json({
       success: true,
       count: data.length,
       lastSyncedAt: new Date().toISOString(),
-      source: dbTransactions.length > 0 ? "DATABASE" : "BUNDLED",
+      source: "LOOKER_STUDIO_LIVE",
       data,
     })
   } catch (error: any) {
     console.error("Error fetching station reports data:", error)
-    // Fallback to bundled JSON so page never breaks
     return NextResponse.json({
       success: true,
       count: defaultTransactions.length,
