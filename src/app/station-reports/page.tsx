@@ -37,6 +37,7 @@ import {
   Moon,
   Flame,
   PieChart,
+  Wallet,
 } from "lucide-react"
 import { AppShell } from "@/components/layout/AppShell"
 import {
@@ -217,6 +218,9 @@ export default function StationReportsPage() {
     const totalSessions = filteredTransactions.length
     const totalKwh = filteredTransactions.reduce((sum, t) => sum + t.kwh, 0)
     const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.revenue, 0)
+    const diffRate = 3.3 // ค่าส่วนต่าง 3.3 บาท/kWh
+    const diffCostAmount = Math.round(totalKwh * diffRate * 100) / 100
+    const netRevenueAfterDiff = Math.round((totalRevenue - diffCostAmount) * 100) / 100
     const totalSeconds = filteredTransactions.reduce(
       (sum, t) => sum + t.durationSeconds,
       0
@@ -229,6 +233,8 @@ export default function StationReportsPage() {
       totalSessions > 0 ? Math.round((totalKwh / totalSessions) * 100) / 100 : 0
     const avgRatePerKwh =
       totalKwh > 0 ? Math.round((totalRevenue / totalKwh) * 100) / 100 : 7.5
+    const netRatePerKwh =
+      totalKwh > 0 ? Math.round((netRevenueAfterDiff / totalKwh) * 100) / 100 : 4.2
 
     // Breakdown by connector
     const connectorsMap: Record<
@@ -280,9 +286,13 @@ export default function StationReportsPage() {
       totalSessions,
       totalKwh: Math.round(totalKwh * 100) / 100,
       totalRevenue: Math.round(totalRevenue * 100) / 100,
+      diffRate,
+      diffCostAmount,
+      netRevenueAfterDiff,
       avgDurationMin,
       avgKwhPerSession,
       avgRatePerKwh,
+      netRatePerKwh,
       connectors: connectorsMap,
       dailyList,
     }
@@ -820,7 +830,7 @@ export default function StationReportsPage() {
         </Card>
 
         {/* Dynamic KPI Summary Cards */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {/* Card 1: พลังงานไฟฟ้าสะสม (kWh) */}
           <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-blue-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -894,7 +904,38 @@ export default function StationReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Card 4: เวลาชาร์จเฉลี่ย (นาที) */}
+          {/* Card 4: รายได้รวมค่าบริการชาร์จ-หักค่าส่วนต่าง (3.3 บาท) */}
+          <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-emerald-50/70 ring-1 ring-emerald-500/20">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle
+                className="text-xs font-medium text-slate-700 truncate"
+                title="รายได้รวมค่าบริการชาร์จ-หักค่าส่วนต่าง (3.3 บาท)"
+              >
+                รายได้หักค่าส่วนต่าง (3.3 บ.)
+              </CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <Wallet className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-700">
+                ฿
+                {stats.netRevenueAfterDiff.toLocaleString("th-TH", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+              <p
+                className="text-[11px] text-emerald-700/90 font-medium flex items-center gap-1 mt-1 truncate"
+                title={`คิดจากสูตร: รายได้รวม ฿${stats.totalRevenue.toLocaleString("th-TH", { minimumFractionDigits: 2 })} - (${stats.totalKwh.toLocaleString("th-TH", { minimumFractionDigits: 2 })} kWh × 3.3 บาท) = ฿${stats.netRevenueAfterDiff.toLocaleString("th-TH", { minimumFractionDigits: 2 })}`}
+              >
+                <TrendingUp className="h-3 w-3 shrink-0" />
+                <span>หัก ฿{stats.diffCostAmount.toLocaleString("th-TH", { minimumFractionDigits: 2 })} (3.3 บ./kWh)</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Card 5: เวลาชาร์จเฉลี่ย (นาที) */}
           <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-white to-purple-50/50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-slate-600">
